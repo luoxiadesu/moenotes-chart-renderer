@@ -11,9 +11,10 @@ fn main() {
         println!("cargo:rerun-if-changed={}", source.join(f).display());
     }
     println!("cargo:rerun-if-changed=src/ffi/abi_check.c");
+    println!("cargo:rerun-if-changed=src/ffi/parser_build.c");
     let mut b = cc::Build::new();
     b.file("src/ffi/abi_check.c");
-    b.file(source.join("src/moenotes_chart_parser.c"))
+    b.file("src/ffi/parser_build.c")
         .file(source.join("third_party/yyjson.c"))
         .include(source.join("include"))
         .include(source.join("third_party"))

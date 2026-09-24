@@ -2,6 +2,9 @@
 
 ## 0.2.0 — initial public source preview
 
+- Cross-platform build review: isolate the parser-private `sig_t` typedef from
+  macOS headers and preserve LF in hashed metadata fixtures on Windows.
+
 Artwork remains work in progress; this is not the final visual design.
 
 - Complete multi-column single-image output. No chart pagination; full-master

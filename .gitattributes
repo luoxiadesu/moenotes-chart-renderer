@@ -1,4 +1,12 @@
 * text=auto
+*.rs text eol=lf
+*.c text eol=lf
+*.toml text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+# Synthetic snapshot hashes are byte-based on every platform.
+tests/fixtures/masterdata/*.json text eol=lf
 *.png binary
 *.ttf binary
 *.otf binary
