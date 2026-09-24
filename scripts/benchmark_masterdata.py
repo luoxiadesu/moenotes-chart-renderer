@@ -23,7 +23,7 @@ def sha(path):
 
 
 def rows(path, name):
-    return json.loads((path / (name + ".json")).read_text())["_allData"]
+    return json.loads((path / (name + ".json")).read_text(encoding="utf-8"))["_allData"]
 
 
 def distribution(values):
@@ -52,7 +52,7 @@ def benchmark(args):
             for field, difficulty in [("_easyID", "EASY"), ("_normalID", "NORMAL"), ("_hardID", "HARD"), ("_expertID", "EXPERT")]:
                 if item.get(field):
                     owners[item[field]] = (item, difficulty)
-        provenance = json.loads((snapshot / "provenance.json").read_text())
+        provenance = json.loads((snapshot / "provenance.json").read_text(encoding="utf-8"))
         for score in rows(snapshot, "MasterLiveMusicScore"):
             key = score["_musicScoreTextFileName"]
             candidates = all_files.get(key.rsplit("/", 1)[-1], [])
@@ -62,14 +62,14 @@ def benchmark(args):
                              "input_sha256": sha(candidates[0]) if len(candidates) == 1 else None,
                              "master_level": score.get("_musicScoreDisplayLevel"), "master_full_combo": score.get("_fullComboCount"),
                              "master_commit": commit, "master_version": provenance["version"]})
-    (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     settings = {"mode": "complete multi-column single PNG", "skin": args.skin,
                 "pixels_per_beat": 64, "pixels_per_lane": 10, "note_height": 8, "arrow_height": 10,
                 "supersample": 2, "auto_spacing": True, "mirror": False,
                 "processes": 1, "chart_source": "local assets; not claimed to be freshly downloaded CDN charts"}
     results = []
     wall_render_started = time.perf_counter()
-    with (args.output / "per-chart.jsonl").open("w") as log:
+    with (args.output / "per-chart.jsonl").open("w", encoding="utf-8") as log:
         for index, item in enumerate(manifest):
             result = dict(item)
             result["status"] = "missing_input" if item["chart_candidates"] == 0 else "ambiguous_input" if item["chart_candidates"] != 1 else "pending"
@@ -86,14 +86,14 @@ def benchmark(args):
                 else:
                     orphan = destination.with_suffix(".metadata.json")
                     orphan.write_text(json.dumps({"title": item["chart_key"], "level": str(item["master_level"]),
-                                                   "master_full_combo": item["master_full_combo"], "provenance": {"repository": "https://github.com/StarMoe-org/moenotes-masterdata", "commit": commit, "region": item["region"], "warning": "Score row has no MasterLiveMusic owner; title/author/cover unknown"}}))
+                                                   "master_full_combo": item["master_full_combo"], "provenance": {"repository": "https://github.com/StarMoe-org/moenotes-masterdata", "commit": commit, "region": item["region"], "warning": "Score row has no MasterLiveMusic owner; title/author/cover unknown"}}), encoding="utf-8")
                     command += ["--metadata", str(orphan)]
                 tick = time.perf_counter()
                 try:
-                    process = subprocess.run(["/usr/bin/time", "-f", "%e %M", "-o", str(timing), *command], capture_output=True, text=True, timeout=180)
+                    process = subprocess.run(["/usr/bin/time", "-f", "%e %M", "-o", str(timing), *command], capture_output=True, text=True, timeout=180, encoding="utf-8")
                     result["wall_seconds"] = time.perf_counter() - tick
                     result["exit_code"] = process.returncode
-                    final_line = timing.read_text().strip().splitlines()[-1].split()
+                    final_line = timing.read_text(encoding="utf-8").strip().splitlines()[-1].split()
                     result["process_wall_seconds"] = float(final_line[0]); result["peak_rss_kib"] = int(final_line[1])
                     for line in process.stderr.splitlines():
                         if line.startswith("TIMINGS "):
@@ -101,7 +101,7 @@ def benchmark(args):
                     if process.returncode:
                         result.update(status="render_failed", diagnostic=process.stderr[-3000:])
                     else:
-                        report = json.loads(destination.with_suffix(".render.json").read_text())
+                        report = json.loads(destination.with_suffix(".render.json").read_text(encoding="utf-8"))
                         if len(report["images"]) != 1 or report["images"][0]["file"] != destination.name:
                             raise ValueError("Render split the chart into multiple images")
                         image = report["images"][0]
@@ -136,8 +136,8 @@ def benchmark(args):
                "peak_rss_kib": distribution([r['peak_rss_kib'] for r in ok]),
                "per_region": {region: {"rows": sum(r['region']==region for r in results), "ok": sum(r['region']==region for r in ok),
                                          "wall_seconds": distribution([r['wall_seconds'] for r in ok if r['region']==region])} for region in regions}}
-    (args.output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    with (args.output / "per-chart.csv").open("w", newline="") as output:
+    (args.output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    with (args.output / "per-chart.csv").open("w", newline="", encoding="utf-8") as output:
         keys = ["region", "score_id", "chart_key", "status", "has_music_metadata", "wall_seconds", "render_encode_seconds", "parse_seconds", "scene_seconds", "publish_seconds", "peak_rss_kib", "width", "height", "columns", "png_bytes"]
         writer = csv.DictWriter(output, fieldnames=keys, extrasaction="ignore"); writer.writeheader(); writer.writerows(results)
     print(json.dumps({k: summary[k] for k in ["rows", "unique_chart_keys", "successful_single_images", "orphan_metadata_rows", "wall_seconds", "render_encode_seconds", "peak_rss_kib"]}), flush=True)

@@ -14,5 +14,5 @@ def main():
    if f.is_file() and f.name.upper().startswith(('LICENSE','COPYING','NOTICE')):
     target=out/(name+'-'+f.name);target.write_bytes(f.read_bytes());notices.append(target.name)
   rows.append({'name':pkg['name'],'version':pkg['version'],'license':pkg.get('license'),'repository':pkg.get('repository'),'notice_files':notices})
- (out/'index.json').write_text(json.dumps(rows,indent=2)+'\n');print('Collected declarations for',len(rows),'packages')
+ (out/'index.json').write_text(json.dumps(rows,indent=2)+'\n', encoding="utf-8");print('Collected declarations for',len(rows),'packages')
 if __name__=='__main__':main()

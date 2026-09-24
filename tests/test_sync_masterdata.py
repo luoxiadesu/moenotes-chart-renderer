@@ -23,15 +23,15 @@ class Updates(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp, patch.object(sync, "get", self.response):
             root = Path(temp)
             a = sync.sync("en", root, "a" * 40)
-            self.assertEqual(json.loads((root / "en/current.json").read_text())["commit"], "a" * 40)
+            self.assertEqual(json.loads((root / "en/current.json").read_text(encoding="utf-8"))["commit"], "a" * 40)
             b = sync.sync("en", root, "b" * 40)
             self.assertTrue(a.is_dir())
-            self.assertEqual(json.loads((root / "en/current.json").read_text())["commit"], "b" * 40)
+            self.assertEqual(json.loads((root / "en/current.json").read_text(encoding="utf-8"))["commit"], "b" * 40)
             (a / "MasterText.json").write_bytes(b"corrupt")
             with self.assertRaises(ValueError):
                 sync.sync("en", root, "a" * 40)
-            self.assertEqual(json.loads((root / "en/current.json").read_text())["commit"], "b" * 40)
-            for name, digest in json.loads((b / "provenance.json").read_text())["files"].items():
+            self.assertEqual(json.loads((root / "en/current.json").read_text(encoding="utf-8"))["commit"], "b" * 40)
+            for name, digest in json.loads((b / "provenance.json").read_text(encoding="utf-8"))["files"].items():
                 self.assertEqual(hashlib.sha256((b / name).read_bytes()).hexdigest(), digest)
 
     def test_default_sync_resolves_new_repository_head_each_time(self):
@@ -39,7 +39,7 @@ class Updates(unittest.TestCase):
             root = Path(temp)
             sync.sync("en", root)
             sync.sync("en", root)
-            self.assertEqual(json.loads((root / "en/current.json").read_text())["commit"], "d" * 40)
+            self.assertEqual(json.loads((root / "en/current.json").read_text(encoding="utf-8"))["commit"], "d" * 40)
 
     def test_partial_download_preserves_previous_pointer(self):
         with tempfile.TemporaryDirectory() as temp, patch.object(sync, "get", self.response):
@@ -51,7 +51,7 @@ class Updates(unittest.TestCase):
                 return self.response(url)
             with patch.object(sync, "get", broken), self.assertRaises(OSError):
                 sync.sync("en", root, "b" * 40)
-            self.assertEqual(json.loads((root / "en/current.json").read_text())["commit"], "a" * 40)
+            self.assertEqual(json.loads((root / "en/current.json").read_text(encoding="utf-8"))["commit"], "a" * 40)
             self.assertFalse((root / "en" / ("b" * 40)).exists())
 
 if __name__ == "__main__":

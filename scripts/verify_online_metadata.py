@@ -23,7 +23,7 @@ def main():
     if args.packs:
         command += ["--packs", str(args.packs), "--skin", "skin001"]
     subprocess.run(command, check=True)
-    report = json.loads(args.output.with_suffix(".render.json").read_text())
+    report = json.loads(args.output.with_suffix(".render.json").read_text(encoding="utf-8"))
     metadata = report["metadata"]
     assert len(report["images"]) == 1
     assert metadata["title"] and metadata["author"] and metadata["cover"]

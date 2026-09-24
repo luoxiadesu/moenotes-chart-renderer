@@ -49,7 +49,7 @@ def sync(region, dest, commit=None):
     final = dest / region / commit
     final.parent.mkdir(parents=True, exist_ok=True)
     if final.exists():
-        provenance = json.loads((final / "provenance.json").read_text())
+        provenance = json.loads((final / "provenance.json").read_text(encoding="utf-8"))
         if provenance["commit"] != commit or provenance["region"] != region:
             raise ValueError("Cache provenance mismatch")
         if provenance.get("repository") != "https://github.com/" + REPO:
@@ -76,7 +76,7 @@ def sync(region, dest, commit=None):
                 "resource_version": version["resource_version"], "verified_at": version["verified_at"],
                 "fetched_at": datetime.datetime.now(datetime.timezone.utc).isoformat(), "files": hashes,
             }
-            (stage / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
+            (stage / "provenance.json").write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
             try:
                 stage.rename(final)
             except FileExistsError:

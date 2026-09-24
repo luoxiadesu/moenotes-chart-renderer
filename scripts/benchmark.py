@@ -8,7 +8,7 @@ def main():
  with tempfile.TemporaryDirectory() as temp:
   t=Path(temp)
   for i in range(a.runs):
-   stats=t/'time.txt';start=time.perf_counter();r=subprocess.run(['/usr/bin/time','-f','%e %M','-o',str(stats),str(a.binary.resolve()),'render',str(a.chart.resolve()),'-o',str(t/'chart.png')],capture_output=True,text=True);assert r.returncode==0,r.stderr
-   report=json.loads((t/'chart.render.json').read_text());assert len(report['images'])==1; elapsed,rss=stats.read_text().strip().split();rows.append({'wall_seconds':time.perf_counter()-start,'process_wall_seconds':float(elapsed),'peak_rss_kib':int(rss),'images':len(report['images']),'source_notes':report['source_notes'],'glyphs':report['glyphs'],'curve_points':report['curve_points']})
- a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps({'configuration':'builtin / default quality / CPU / Linux time peak RSS','input':a.chart.name,'runs':rows},indent=2)+'\n');print(rows)
+   stats=t/'time.txt';start=time.perf_counter();r=subprocess.run(['/usr/bin/time','-f','%e %M','-o',str(stats),str(a.binary.resolve()),'render',str(a.chart.resolve()),'-o',str(t/'chart.png')],capture_output=True,text=True, encoding="utf-8");assert r.returncode==0,r.stderr
+   report=json.loads((t/'chart.render.json').read_text(encoding="utf-8"));assert len(report['images'])==1; elapsed,rss=stats.read_text(encoding="utf-8").strip().split();rows.append({'wall_seconds':time.perf_counter()-start,'process_wall_seconds':float(elapsed),'peak_rss_kib':int(rss),'images':len(report['images']),'source_notes':report['source_notes'],'glyphs':report['glyphs'],'curve_points':report['curve_points']})
+ a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps({'configuration':'builtin / default quality / CPU / Linux time peak RSS','input':a.chart.name,'runs':rows},indent=2)+'\n', encoding="utf-8");print(rows)
 if __name__=='__main__':main()

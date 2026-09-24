@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / "dist")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    version = tomllib.loads((ROOT / "Cargo.toml").read_text())["package"]["version"]
+    version = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))["package"]["version"]
     name = f"moenotes-chart-renderer-{version}-{args.target}"
     with tempfile.TemporaryDirectory() as temp:
         folder = Path(temp) / name
@@ -36,7 +36,7 @@ def main():
         shutil.copytree(ROOT / "tests/fixtures", folder / "examples")
         hashes = {str(path.relative_to(folder)): hashlib.sha256(path.read_bytes()).hexdigest()
                   for path in folder.rglob("*") if path.is_file()}
-        (folder / "SHA256.json").write_text(json.dumps(hashes, indent=2) + "\n")
+        (folder / "SHA256.json").write_text(json.dumps(hashes, indent=2) + "\n", encoding="utf-8")
         if "windows" in args.target:
             destination = args.output / (name + ".zip")
             with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:

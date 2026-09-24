@@ -45,6 +45,12 @@ jobs:
       - run: python scripts/verify_release.py --binary ${{ matrix.binary }}
       - run: pip install Pillow==10.2.0
       - run: python scripts/check_golden.py --binary ${{ matrix.binary }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: synthetic-golden-${{ matrix.target }}
+          path: output/golden-check/*
+          if-no-files-found: ignore
       - run: python scripts/collect_licenses.py
       - run: python scripts/package_release.py --binary ${{ matrix.binary }} --target ${{ matrix.target }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

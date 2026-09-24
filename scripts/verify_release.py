@@ -26,16 +26,16 @@ def main():
         env.pop("MOENOTES_ASSETS_DIR", None)
 
         def run(*arguments, ok=True):
-            result = subprocess.run([str(exe), *arguments], cwd=root, env=env, capture_output=True, text=True)
+            result = subprocess.run([str(exe), *arguments], cwd=root, env=env, capture_output=True, text=True, encoding="utf-8")
             assert (result.returncode == 0) == ok, result.stderr
             return result
 
         for bars in ["1", "2"]:
             run("render", "fixtures/synthetic.json", "-o", "chart.png", "--metadata", "fixtures/metadata.json",
                 "--bars-per-column", bars, "--supersample", "1")
-            report = json.loads((root / "chart.render.json").read_text())
+            report = json.loads((root / "chart.render.json").read_text(encoding="utf-8"))
             assert len(report["images"]) == 1 and report["columns"] > 1
-        pointer = json.loads((root / "chart.render-set/current.json").read_text())
+        pointer = json.loads((root / "chart.render-set/current.json").read_text(encoding="utf-8"))
         generation = root / "chart.render-set" / pointer["generation"]
         for entry in pointer["files"]:
             assert hashlib.sha256((generation / entry["name"]).read_bytes()).hexdigest() == entry["sha256"]

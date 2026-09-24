@@ -4,6 +4,8 @@
 
 - Cross-platform build review: isolate the parser-private `sig_t` typedef from
   macOS headers and preserve LF in hashed metadata fixtures on Windows.
+- Read and write tooling JSON as UTF-8 on every platform; retain full synthetic
+  image diagnostics for cross-platform visual checks.
 
 Artwork remains work in progress; this is not the final visual design.
 
