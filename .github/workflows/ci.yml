@@ -1,0 +1,53 @@
+name: build-and-test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            binary: target/release/moenotes-chart-renderer
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+            binary: target/release/moenotes-chart-renderer.exe
+          - os: macos-14
+            target: aarch64-apple-darwin
+            binary: target/release/moenotes-chart-renderer
+    timeout-minutes: 35
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@ce678459e9fc7500d337468f904b95f1b5c10b5e
+        with:
+          toolchain: 1.98.1
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Linux libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libfreetype6-dev libclang-dev clang ninja-build
+      - run: cargo fmt --check
+      - run: cargo build --release --locked
+      - run: cargo test --release --locked
+      - run: cargo clippy --release --locked --all-targets -- -D warnings
+      - run: cargo doc --no-deps --locked
+      - run: cargo run --release --locked --example memory
+      - run: python -m unittest discover -s tests -p "test_*.py"
+      - run: python scripts/verify_release.py --binary ${{ matrix.binary }}
+      - run: pip install Pillow==10.2.0
+      - run: python scripts/check_golden.py --binary ${{ matrix.binary }}
+      - run: python scripts/collect_licenses.py
+      - run: python scripts/package_release.py --binary ${{ matrix.binary }} --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: moenotes-chart-renderer-${{ matrix.target }}
+          path: dist/*

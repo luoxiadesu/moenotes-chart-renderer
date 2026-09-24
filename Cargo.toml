@@ -1,0 +1,30 @@
+[package]
+name = "moenotes-chart-renderer"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.98"
+publish = false
+license = "MIT"
+description = "Render rhythm charts as complete multi-column PNG sheets"
+repository = "https://github.com/luoxiadesu/moenotes-chart-renderer"
+homepage = "https://bdon.moe"
+readme = "README.md"
+include = ["src/**", "vendor/**", "assets/**", "build.rs", "Cargo.toml", "Cargo.lock", "LICENSE", "THIRD_PARTY.md", "README.md", "docs/**"]
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+skia-safe = "=0.153.3"
+libz-sys = { version = "=1.1.29", features = ["static"] }
+fs2 = "=0.4.3"
+
+[build-dependencies]
+cc = "=1.4.7"
+
+[features]
+research-tests = []
+
+[profile.release]
+strip = true

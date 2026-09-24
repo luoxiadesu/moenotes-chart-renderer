@@ -1,0 +1,135 @@
+{
+  "events": {
+    "bpm": [
+      {
+        "t": 0,
+        "bpm": 140
+      },
+      {
+        "t": 3840,
+        "bpm": 180
+      }
+    ],
+    "sig": [
+      {
+        "t": 0,
+        "sig": [
+          4,
+          4
+        ]
+      },
+      {
+        "t": 7680,
+        "sig": [
+          3,
+          4
+        ]
+      }
+    ],
+    "skill": [
+      1920
+    ],
+    "fever": [
+      [
+        1920,
+        5760
+      ]
+    ],
+    "call": [
+      {
+        "t": 0,
+        "timing": [
+          1,
+          0,
+          1,
+          1
+        ]
+      }
+    ]
+  },
+  "notes": [
+    {
+      "type": "tap",
+      "t": 480,
+      "pos": 1,
+      "size": 6
+    },
+    {
+      "type": "tap",
+      "t": 480,
+      "pos": 17,
+      "size": 6,
+      "crit": true
+    },
+    {
+      "type": "flick",
+      "dir": "left",
+      "t": 960,
+      "pos": 4,
+      "size": 8
+    },
+    {
+      "type": "trace",
+      "t": 1440,
+      "pos": 12,
+      "size": 4
+    },
+    {
+      "type": "long",
+      "node": [
+        {
+          "t": 1920,
+          "pos": 0,
+          "size": 6,
+          "ease": [
+            "out",
+            "in"
+          ]
+        },
+        {
+          "t": 2880,
+          "pos": "auto"
+        },
+        {
+          "t": 3840,
+          "pos": 12,
+          "size": 8
+        },
+        {
+          "t": 3840,
+          "pos": 4,
+          "size": 4,
+          "visible": false
+        },
+        {
+          "t": 5760,
+          "pos": 0,
+          "size": 6,
+          "type": "flick"
+        }
+      ]
+    },
+    {
+      "type": "guide",
+      "node": [
+        {
+          "t": 5760,
+          "pos": 8,
+          "size": 0
+        },
+        {
+          "t": 7680,
+          "pos": 0,
+          "size": 8
+        }
+      ]
+    },
+    {
+      "type": "tap",
+      "t": 9120,
+      "pos": 6,
+      "size": 6,
+      "alpha": "fadeIn"
+    }
+  ]
+}

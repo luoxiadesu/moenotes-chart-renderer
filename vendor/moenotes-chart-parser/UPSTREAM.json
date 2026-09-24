@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/luoxiadesu/moenotes-chart-parser",
+  "commit": "482d489ce41442811e7ca1e278c7e0ce9788d67a",
+  "version": "0.3.0",
+  "sha256": {
+    "LICENSE": "d69ef3d1b9b39922392082d3cc30c617920f7eab53f2e8f84999b88acdd92bad",
+    "include/moenotes_chart_parser.h": "7d8482648b2fd46990330108a78a555a4f56e1541cabd3bad5182972b3799e29",
+    "third_party/LICENSE.yyjson": "45e384d3d52c73cba3a64d6e6c25d47cd738cd8a55c30629e3201046eda62947",
+    "third_party/yyjson.h": "ef803cda5c06b8962face6dfa39c3284b3bcf3e73f4d7317664690cc779679ca",
+    "third_party/yyjson.c": "d2d58ef0a3b2267862dc363832c4f3185fd375aea933d5d3419d1a940d6ece2e",
+    "src/moenotes_chart_parser.c": "e77712732183f8f44c76d0a8728fcdea204a004d95a158141036cb9cd455997e"
+  }
+}

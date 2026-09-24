@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/StarMoe-org/moenotes-masterdata",
+  "commit": "0000000000000000000000000000000000000000",
+  "region": "synthetic-test-only",
+  "files": {
+    "MasterLiveMusicScore.json": "864198c74f972ee766b003dc23db5f4ceffaf7bcc0e8cafb954f3fcaa9d41abf",
+    "MasterLiveMusic.json": "6c807818538ea7f27291fb9d4e7c089a8cc5470529a9143ed689d2af57cb46b2",
+    "MasterBand.json": "ababc9f369ab825b6b075d9830401a956aedc4114127bae7cda33e329471f525",
+    "MasterText.json": "86368611f263cbceaff855b1538343ed7a5e229023071732a8a5074a31062888"
+  },
+  "fixture": true
+}

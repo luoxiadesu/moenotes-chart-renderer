@@ -1,0 +1,8 @@
+/target/
+/output/
+/dist/
+/data/
+/.cache/
+__pycache__/
+*.pyc
+*.log
