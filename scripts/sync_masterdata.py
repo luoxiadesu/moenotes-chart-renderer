@@ -86,7 +86,7 @@ def sync(region, dest, commit=None):
             if stage.exists():
                 shutil.rmtree(stage)
     pointer = dest / region / "current.json"
-    with tempfile.NamedTemporaryFile(mode="w", prefix=".current-", dir=pointer.parent, delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", prefix=".current-", dir=pointer.parent, delete=False) as tmp:
         json.dump({"commit": commit, "directory": commit, "checked_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}, tmp)
         tmp.flush()
         os.fsync(tmp.fileno())

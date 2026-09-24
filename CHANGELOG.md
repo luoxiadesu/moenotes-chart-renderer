@@ -6,6 +6,8 @@
   macOS headers and preserve LF in hashed metadata fixtures on Windows.
 - Read and write tooling JSON as UTF-8 on every platform; retain full synthetic
   image diagnostics for cross-platform visual checks.
+- Review native Linux, macOS and Windows full-sheet baselines separately to
+  account for native font rasterization, retaining the original error threshold.
 
 Artwork remains work in progress; this is not the final visual design.
 

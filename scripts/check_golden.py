@@ -18,7 +18,9 @@ def main():
     parser.add_argument("--update", action="store_true")
     parser.add_argument("--diagnostics", type=Path, default=ROOT / "output/golden-check")
     args = parser.parse_args()
-    golden = ROOT / "tests/golden/synthetic.png"
+    golden_name = {"Darwin": "synthetic-macos.png", "Windows": "synthetic-windows.png"}.get(
+        platform.system(), "synthetic.png")
+    golden = ROOT / "tests/golden" / golden_name
     with tempfile.TemporaryDirectory() as temp:
         output = Path(temp) / "synthetic.png"
         result = subprocess.run([
@@ -28,12 +30,14 @@ def main():
             "--bars-per-column", "2",
         ], capture_output=True, text=True, encoding="utf-8")
         assert result.returncode == 0, result.stderr
+        report = json.loads(output.with_suffix(".render.json").read_text(encoding="utf-8"))
+        assert len(report["images"]) == 1 and report["columns"] > 1
         with Image.open(output) as source:
             image = source.convert("RGB")
         if args.update:
             golden.parent.mkdir(exist_ok=True)
             image.save(golden)
-            print("Golden updated explicitly")
+            print(f"Golden updated explicitly: {golden_name}")
             return
         with Image.open(golden) as source:
             reference = source.convert("RGB")
@@ -45,7 +49,7 @@ def main():
         diff.save(args.diagnostics / "difference.png")
         mean = sum(ImageStat.Stat(diff).mean) / 3
         metrics = {"mean_absolute_channel_error": mean, "dimensions": image.size,
-                   "threshold": 1.0, "platform": platform.system(),
+                   "threshold": 1.0, "platform": platform.system(), "baseline": golden_name,
                    "difference_bounds": diff.getbbox()}
         (args.diagnostics / "metrics.json").write_text(
             json.dumps(metrics, indent=2) + "\n", encoding="utf-8")

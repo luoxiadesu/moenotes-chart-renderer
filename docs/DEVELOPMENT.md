@@ -36,6 +36,9 @@ not the project's configured update version.
 Artwork is still under development. Golden images detect regressions in the
 current implementation; they do not freeze the final visual design. Regenerate
 a golden explicitly and review the change before committing it.
+`check_golden.py --update` updates only the current platform's complete sheet.
+Record its source commit/runner and hash in `tests/golden/README.md` after review;
+never update a failing baseline automatically in CI.
 
 CI uploads only synthetic artifacts and code packages. Public source push does
 not authorize a tag, GitHub Release, container deployment or game-asset upload.

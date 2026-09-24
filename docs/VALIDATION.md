@@ -9,6 +9,13 @@ updates, publication rollback and the memory API. Python tests check dynamic
 masterdata updates and vendored/font hashes. The visual baseline is a complete
 multi-column PNG; artwork is still under development.
 
+Visual checks compare each complete sheet against its reviewed platform
+baseline at the same mean absolute channel error limit of 1.0/255. Bundled
+font files are identical, but native Skia font backends produce different
+glyph edges and advances. Linux, Windows and macOS baselines and their review
+provenance are in [tests/golden](../tests/golden/README.md). CI retains the full
+actual/reference/difference images and metrics as synthetic diagnostics.
+
 The full-masterdata performance test resolves the authoritative repository's
 current main and includes every MasterLiveMusicScore row from hk-tw-mo, en and
 kr. It records missing input, orphan metadata and failure rows, and requires
