@@ -3,21 +3,31 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::{Command, Output},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 struct Workspace(PathBuf);
+static WORKSPACE_ID: AtomicU64 = AtomicU64::new(0);
 impl Workspace {
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!(
-            "moenotes-cli-{}-{}",
-            std::process::id(),
+        Self::at_timestamp(
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
-                .as_nanos()
+                .as_nanos(),
+        )
+    }
+    fn at_timestamp(timestamp: u128) -> Self {
+        let path = std::env::temp_dir().join(format!(
+            "moenotes-cli-{}-{}-{}",
+            std::process::id(),
+            timestamp,
+            WORKSPACE_ID.fetch_add(1, Ordering::Relaxed)
         ));
-        fs::create_dir_all(&path).unwrap();
+        // Windows clocks can give parallel tests the same timestamp. Each test
+        // owns its directory; never reuse another test's files or cleanup scope.
+        fs::create_dir(&path).unwrap();
         Self(path)
     }
     fn run(&self, args: &[&str]) -> Output {
@@ -55,6 +65,20 @@ fn success(result: Output) {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
+}
+
+#[test]
+fn workspaces_with_identical_timestamps_do_not_share_cleanup() {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let a = Workspace::at_timestamp(timestamp);
+    let b = Workspace::at_timestamp(timestamp);
+    assert_ne!(a.0, b.0);
+    fs::write(b.0.join("owned.txt"), b"owned").unwrap();
+    drop(a);
+    assert_eq!(fs::read(b.0.join("owned.txt")).unwrap(), b"owned");
 }
 
 #[test]
