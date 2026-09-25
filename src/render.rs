@@ -1,7 +1,7 @@
 //! Page-oriented Skia presentation. Geometry is already resolved in Scene.
 use crate::{
     Skin,
-    layout::{self, Column},
+    layout::{self, Column, FlickLayout, Theme},
     scene::{Ribbon, Row, Scene},
     sha256,
     skin::{NotePart, PreviewNote, gradient_color, rgba},
@@ -19,6 +19,70 @@ const PANEL: Color = Color::from_rgb(20, 29, 40);
 const FG: Color = Color::from_rgb(228, 237, 246);
 const MUTED: Color = Color::from_rgb(137, 157, 177);
 const GOLD: Color = Color::from_rgb(240, 204, 119);
+struct Palette {
+    background: Color,
+    panel: Color,
+    text: Color,
+    muted: Color,
+    rule: Color,
+    lane: Color,
+    fine_lane: Color,
+    bar: Color,
+    beat: Color,
+    subdivision: Color,
+}
+impl Palette {
+    fn new(theme: Theme) -> Self {
+        match theme {
+            Theme::Print => Self {
+                background: Color::WHITE,
+                panel: Color::WHITE,
+                text: Color::from_rgb(30, 41, 55),
+                muted: Color::from_rgb(80, 92, 106),
+                rule: Color::from_rgb(192, 200, 210),
+                lane: Color::from_rgb(207, 214, 223),
+                fine_lane: Color::from_rgb(238, 240, 244),
+                bar: Color::from_rgb(133, 148, 166),
+                beat: Color::from_rgb(217, 223, 231),
+                subdivision: Color::from_rgb(237, 240, 244),
+            },
+            Theme::Dark => Self {
+                background: BG,
+                panel: PANEL,
+                text: FG,
+                muted: MUTED,
+                rule: Color::from_rgb(42, 55, 69),
+                lane: Color::from_rgb(46, 60, 76),
+                fine_lane: Color::from_rgb(27, 38, 51),
+                bar: Color::from_rgb(85, 103, 125),
+                beat: Color::from_rgb(40, 54, 70),
+                subdivision: Color::from_rgb(28, 40, 53),
+            },
+            Theme::Black => Self {
+                background: Color::from_rgb(8, 9, 12),
+                panel: Color::from_rgb(16, 18, 23),
+                text: Color::from_rgb(243, 244, 247),
+                muted: Color::from_rgb(176, 182, 194),
+                rule: Color::from_rgb(61, 65, 76),
+                lane: Color::from_rgb(53, 57, 68),
+                fine_lane: Color::from_rgb(27, 30, 38),
+                bar: Color::from_rgb(110, 119, 139),
+                beat: Color::from_rgb(48, 53, 64),
+                subdivision: Color::from_rgb(33, 37, 45),
+            },
+        }
+    }
+}
+fn print_note_color(role: &str) -> Color {
+    match role {
+        "tap" => Color::from_rgb(22, 100, 129),
+        "trace" => Color::from_rgb(111, 67, 158),
+        "flick" => Color::from_rgb(155, 94, 8),
+        "flick_left" => Color::from_rgb(21, 118, 80),
+        "flick_right" => Color::from_rgb(172, 52, 91),
+        _ => Color::from_rgb(62, 83, 168),
+    }
+}
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Metadata {
     pub title: String,
@@ -41,6 +105,8 @@ pub struct Metadata {
 pub struct ImageReport {
     pub file: String,
     pub width: i32,
+    pub logical_width: i32,
+    pub logical_height: i32,
     pub height: i32,
     pub sha256: String,
     pub columns: [usize; 2],
@@ -71,10 +137,137 @@ pub struct Report {
     pub unused_vertical_fraction: f64,
     pub track_width_fraction: f64,
     pub dense_body_overlaps: usize,
+    /// Subset of body overlaps between structural anchors 1–2 ticks apart.
+    pub structural_connection_overlaps: usize,
     pub arrow_body_box_overlaps: usize,
+    /// Collisions before dense arrows were moved to their explicit side rail.
+    pub inline_arrow_body_box_overlaps: usize,
+    pub flick_callouts: Vec<FlickCallout>,
+    pub unresolved_flick_note_ids: Vec<i32>,
+    pub flick_rail_width: f64,
     pub mark_body_box_overlaps: usize,
     pub annotation_overflow: usize,
     pub statistics: crate::parser::Statistics,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct FlickCallout {
+    pub note_id: i32,
+    pub column: usize,
+    /// Center relative to the track's right edge; y is the actual note y.
+    pub offset_x: f64,
+    pub y: f64,
+}
+fn arrow_body_collision(
+    scene: &Scene,
+    skin: &Skin,
+    a: &crate::scene::Glyph,
+    b: &crate::scene::Glyph,
+) -> bool {
+    if a.column != b.column || !a.note.role().is_some_and(|r| r.starts_with("flick")) {
+        return false;
+    }
+    let delta = (b.note.tick - a.note.tick) as f64 * scene.layout.options.pixels_per_beat / 480.;
+    let own = rendered_body_height(scene, skin, &a.note);
+    let other = rendered_body_height(scene, skin, &b.note);
+    let half = if scene.layout.options.theme == Theme::Print && skin.manifest.skin == "builtin" {
+        (a.note.width * scene.layout.options.pixels_per_lane - 2.).clamp(2., 22.)
+            / scene.layout.options.pixels_per_lane
+            / 2.
+    } else {
+        a.note.width / 2.
+    };
+    let center = (a.note.left + a.note.right) / 2.;
+    delta > own / 2. + 1.5 - other / 2.
+        && delta < own / 2. + 1.5 + scene.layout.options.arrow_height + other / 2.
+        && b.note.left < center + half
+        && b.note.right > center - half
+}
+/// Interval coloring keeps full-size arrows off note bodies without changing
+/// ticks or lane geometry. Extra rail width is explicit in the output report.
+fn flick_callouts(scene: &Scene, skin: &Skin) -> (Vec<FlickCallout>, Vec<i32>, f64) {
+    if scene.layout.options.flick_layout == FlickLayout::Inline || skin.manifest.skin != "builtin" {
+        return (vec![], vec![], 0.);
+    }
+    let mut callouts = vec![];
+    let mut unresolved = vec![];
+    let mut maximum = 0;
+    for ci in 0..scene.layout.columns.len() {
+        let mut ends: Vec<f64> = vec![];
+        let glyphs: Vec<_> = scene.glyphs.iter().filter(|g| g.column == ci).collect();
+        for (i, a) in glyphs.iter().enumerate() {
+            if !a.note.role().is_some_and(|role| role.starts_with("flick")) {
+                continue;
+            }
+            let collision = glyphs
+                .iter()
+                .skip(i + 1)
+                .take_while(|b| {
+                    (b.note.tick - a.note.tick) as f64 * scene.layout.options.pixels_per_beat / 480.
+                        <= scene.layout.options.note_height + scene.layout.options.arrow_height + 4.
+                })
+                .any(|b| arrow_body_collision(scene, skin, a, b));
+            if !collision {
+                continue;
+            }
+            let position = a.note.tick as f64 * scene.layout.options.pixels_per_beat / 480.;
+            let height = scene.layout.options.arrow_height + 4.;
+            let slot = ends
+                .iter()
+                .position(|end| *end <= position - height / 2.)
+                .unwrap_or(ends.len());
+            if slot >= 16 {
+                unresolved.push(a.note.id);
+                continue;
+            }
+            if slot == ends.len() {
+                ends.push(0.);
+            }
+            ends[slot] = position + height / 2.;
+            maximum = maximum.max(slot + 1);
+            callouts.push(FlickCallout {
+                note_id: a.note.id,
+                column: ci,
+                offset_x: 20. + slot as f64 * 32.,
+                y: scene
+                    .layout
+                    .y(&scene.layout.columns[ci], a.note.tick as f64),
+            });
+        }
+    }
+    (
+        callouts,
+        unresolved,
+        maximum as f64 * 32. + if maximum > 0 { 8. } else { 0. },
+    )
+}
+fn draw_callout(c: &Canvas, note: &crate::parser::Note, x: f64, y: f64, height: f64, theme: Theme) {
+    let color = if theme == Theme::Print {
+        print_note_color(note.role().unwrap())
+    } else {
+        match note.direction {
+            1 => Color::from_rgb(108, 225, 172),
+            2 => Color::from_rgb(255, 159, 192),
+            _ => GOLD,
+        }
+    };
+    let mut path = sk::PathBuilder::new();
+    let (x, y) = (x as f32, y as f32);
+    let h = height as f32 / 2. - 0.8;
+    if note.direction == 0 {
+        path.move_to((x - 10., y + h));
+        path.line_to((x, y - h));
+        path.line_to((x + 10., y + h));
+    } else {
+        let sign = if note.direction == 1 { -1. } else { 1. };
+        for offset in [-5., 5.] {
+            path.move_to((x + offset - sign * 3., y - h));
+            path.line_to((x + offset + sign * 3., y));
+            path.line_to((x + offset - sign * 3., y + h));
+        }
+    }
+    let mut p = paint(color);
+    p.set_style(sk::paint::Style::Stroke).set_stroke_width(1.6);
+    c.draw_path(&path.detach(), &p);
 }
 fn paint(color: Color) -> Paint {
     let mut p = Paint::default();
@@ -88,6 +281,111 @@ fn stroke(c: &Canvas, a: (f64, f64), b: (f64, f64), color: Color, width: f32) {
 }
 fn panel(c: &Canvas, r: Rect, color: Color) {
     c.draw_round_rect(r, 6., 6., &paint(color));
+}
+/// Original print artwork uses outlines and shape as well as color. External
+/// packs retain their sprites, with an underlay to separate pale bodies from paper.
+fn draw_print_note(
+    c: &Canvas,
+    skin: &Skin,
+    request: &PreviewNote<'_>,
+    part: NotePart,
+) -> Result<bool> {
+    let n = request;
+    let color = print_note_color(n.role);
+    let (x, y) = n.center;
+    let width = n.width_lanes * n.lane_px;
+    let body = layout::body_height(n.role, n.body_height as f64) as f32;
+    if skin.manifest.skin != "builtin" {
+        if matches!(part, NotePart::Body) {
+            let mut outline = paint(color);
+            outline
+                .set_style(sk::paint::Style::Stroke)
+                .set_stroke_width(1.1);
+            c.draw_round_rect(
+                Rect::from_xywh(x - width / 2., y - body / 2., width, body),
+                1.,
+                1.,
+                &outline,
+            );
+        }
+        return skin.draw_preview_part(c, n, part);
+    }
+    match part {
+        NotePart::Body => {
+            let rect = Rect::from_xywh(
+                x - width / 2. + 0.5,
+                y - body / 2.,
+                (width - 1.).max(0.5),
+                body,
+            );
+            let mut fill = paint(color);
+            fill.set_alpha_f(if n.role == "connection" { 0.12 } else { 0.22 });
+            c.draw_round_rect(rect, 1., 1., &paint(Color::WHITE));
+            c.draw_round_rect(rect, 1., 1., &fill);
+            let mut edge = paint(color);
+            edge.set_style(sk::paint::Style::Stroke)
+                .set_stroke_width(1.1);
+            c.draw_round_rect(rect, 1., 1., &edge);
+            if n.role == "trace" {
+                stroke(
+                    c,
+                    ((x - width / 2. + 2.) as f64, y as f64),
+                    ((x + width / 2. - 2.) as f64, y as f64),
+                    color,
+                    0.8,
+                );
+            } else if n.role != "connection" {
+                stroke(
+                    c,
+                    ((x - width / 2. + 1.) as f64, (y - body / 2. + 1.) as f64),
+                    ((x + width / 2. - 1.) as f64, (y - body / 2. + 1.) as f64),
+                    color,
+                    1.4,
+                );
+            }
+        }
+        NotePart::Arrow if n.role.starts_with("flick") => {
+            let cy = y - body / 2. - 1.5 - n.arrow_height / 2.;
+            let h = n.arrow_height / 2. - 0.8;
+            let w = (width - 2.).clamp(2., 22.);
+            let mut path = sk::PathBuilder::new();
+            if n.role == "flick" {
+                path.move_to((x - w / 2., cy + h));
+                path.line_to((x, cy - h));
+                path.line_to((x + w / 2., cy + h));
+            } else {
+                let sign = if n.role == "flick_left" { -1. } else { 1. };
+                for offset in [-w * 0.24, w * 0.24] {
+                    path.move_to((x + offset - sign * w * 0.16, cy - h));
+                    path.line_to((x + offset + sign * w * 0.16, cy));
+                    path.line_to((x + offset - sign * w * 0.16, cy + h));
+                }
+            }
+            let mut edge = paint(color);
+            edge.set_style(sk::paint::Style::Stroke)
+                .set_stroke_width(1.6);
+            c.draw_path(&path.detach(), &edge);
+        }
+        NotePart::Mark if n.critical => {
+            if n.native_critical {
+                return skin.draw_preview_part(c, n, part);
+            }
+            let mut path = sk::PathBuilder::new();
+            path.move_to((x, y - 2.6));
+            path.line_to((x + 2.6, y));
+            path.line_to((x, y + 2.6));
+            path.line_to((x - 2.6, y));
+            path.close();
+            let path = path.detach();
+            let mut halo = paint(Color::WHITE);
+            halo.set_style(sk::paint::Style::Stroke)
+                .set_stroke_width(1.4);
+            c.draw_path(&path, &halo);
+            c.draw_path(&path, &paint(Color::from_rgb(129, 78, 9)));
+        }
+        _ => {}
+    }
+    Ok(false)
 }
 fn band_geometry(
     rows: &[Row],
@@ -131,8 +429,15 @@ fn band_geometry(
     (fill.detach(), left.detach(), right.detach())
 }
 fn draw_ribbon(c: &Canvas, r: &Ribbon, col: &Column, scene: &Scene, skin: &Skin, x: f64) {
+    let print = scene.layout.options.theme == Theme::Print;
     let g = &skin.manifest.line.normal;
-    let base = if r.guide {
+    let base = if print {
+        if r.guide {
+            Color::from_rgb(112, 83, 153)
+        } else {
+            print_note_color("slide")
+        }
+    } else if r.guide {
         let g = &skin.manifest.line.guide_color;
         rgba([g.r, g.g, g.b], g.a)
     } else {
@@ -177,7 +482,9 @@ fn draw_ribbon(c: &Canvas, r: &Ribbon, col: &Column, scene: &Scene, skin: &Skin,
         };
         let (path, left, right) = band_geometry(segment, col, scene, x, inset);
         let mut p = paint(base);
-        if r.guide {
+        if print {
+            p.set_alpha_f(if r.guide { 0.07 } else { 0.14 });
+        } else if r.guide {
             p.set_alpha_f(0.20);
         } else {
             let positions = [0., 0.5, 1.];
@@ -210,7 +517,7 @@ fn draw_ribbon(c: &Canvas, r: &Ribbon, col: &Column, scene: &Scene, skin: &Skin,
         c.draw_path(&path, &p);
         // Thin edge light plus restrained outer glow. No noisy per-polygon borders
         // at segment joins. This is a documented static style, not a Unity shader.
-        if !r.guide {
+        if !r.guide && !print {
             let mut glow = paint(base);
             glow.set_style(sk::paint::Style::Stroke)
                 .set_stroke_width(2.2)
@@ -222,12 +529,25 @@ fn draw_ribbon(c: &Canvas, r: &Ribbon, col: &Column, scene: &Scene, skin: &Skin,
         let mut edge = paint(base);
         edge.set_style(sk::paint::Style::Stroke)
             .set_stroke_width(if r.guide { 0.7 } else { 1.0 })
-            .set_alpha_f(if r.guide { 0.36 } else { 0.70 });
+            .set_alpha_f(if r.guide { 0.50 } else { 0.80 });
+        if !print {
+            edge.set_alpha_f(if r.guide { 0.36 } else { 0.70 });
+        } else if r.guide {
+            edge.set_path_effect(sk::PathEffect::dash(&[3., 3.], 0.));
+        }
         c.draw_path(&left, &edge);
         c.draw_path(&right, &edge);
     }
 }
-fn event_color(kind: &str) -> Color {
+fn event_color(kind: &str, theme: Theme) -> Color {
+    if theme == Theme::Print {
+        return match kind {
+            "bpm" => Color::from_rgb(142, 81, 15),
+            "meter" => Color::from_rgb(87, 72, 144),
+            "skill" => Color::from_rgb(155, 47, 102),
+            _ => Color::from_rgb(15, 110, 91),
+        };
+    }
     match kind {
         "bpm" => Color::from_rgb(246, 181, 106),
         "meter" => Color::from_rgb(169, 174, 232),
@@ -325,39 +645,51 @@ fn metric_bpm(scene: &Scene) -> String {
         format!("{min:.0}–{max:.0} BPM")
     }
 }
-fn note_height(role: &str, height: f64) -> f64 {
-    match role {
-        "trace" => height * 0.72,
-        "connection" => height * 0.53,
-        _ => height,
+fn rendered_body_height(scene: &Scene, skin: &Skin, note: &crate::parser::Note) -> f64 {
+    let role = note.role().unwrap();
+    if scene.layout.options.theme == Theme::Print && skin.manifest.skin == "builtin" {
+        return layout::body_height(role, scene.layout.options.note_height);
     }
+    let main = &skin.manifest.sprites[&skin.manifest.notes[role].main];
+    let tap = &skin.manifest.sprites[&skin.manifest.notes["tap"].main];
+    (main.rect.height / main.pixels_per_unit / (tap.rect.height / tap.pixels_per_unit)) as f64
+        * scene.layout.options.note_height
 }
-fn overlap_count(scene: &Scene) -> usize {
+fn overlap_count(scene: &Scene, skin: &Skin) -> (usize, usize) {
     let mut n = 0;
+    let mut structural = 0;
     let glyphs = &scene.glyphs;
+    let heights: Vec<_> = glyphs
+        .iter()
+        .map(|g| rendered_body_height(scene, skin, &g.note))
+        .collect();
+    let max_height = heights.iter().copied().fold(0., f64::max);
     for (i, a) in glyphs.iter().enumerate() {
-        for b in glyphs.iter().skip(i + 1) {
+        for (j, b) in glyphs.iter().enumerate().skip(i + 1) {
             let dt =
                 (b.note.tick - a.note.tick) as f64 / 480. * scene.layout.options.pixels_per_beat;
-            if dt > scene.layout.options.note_height {
+            if dt > max_height {
                 break;
             }
             if dt > 0.
                 && a.column == b.column
                 && a.note.left < b.note.right
                 && b.note.left < a.note.right
-                && dt
-                    < (note_height(a.note.role().unwrap(), scene.layout.options.note_height)
-                        + note_height(b.note.role().unwrap(), scene.layout.options.note_height))
-                        / 2.
+                && dt < (heights[i] + heights[j]) / 2.
             {
                 n += 1;
+                if a.note.role() == Some("connection")
+                    && b.note.role() == Some("connection")
+                    && b.note.tick - a.note.tick <= 2
+                {
+                    structural += 1;
+                }
             }
         }
     }
-    n
+    (n, structural)
 }
-fn decoration_overlap_count(scene: &Scene) -> (usize, usize) {
+fn decoration_overlap_count(scene: &Scene, skin: &Skin, moved: &BTreeSet<i32>) -> (usize, usize) {
     let mut arrows = 0;
     let mut marks = 0;
     let unit = scene.layout.options.pixels_per_beat / 480.;
@@ -374,10 +706,7 @@ fn decoration_overlap_count(scene: &Scene) -> (usize, usize) {
             {
                 continue;
             }
-            if a.note.role().is_some_and(|r| r.starts_with("flick"))
-                && delta
-                    < scene.layout.options.arrow_height + scene.layout.options.note_height + 1.5
-            {
+            if !moved.contains(&a.note.id) && arrow_body_collision(scene, skin, a, b) {
                 arrows += 1;
             }
             if a.note.critical && delta < (scene.layout.options.note_height + 4.6) / 2. {
@@ -405,6 +734,9 @@ pub fn render_memory(
     cover_bytes: Option<&[u8]>,
 ) -> Result<Rendered> {
     let output = Path::new(basename);
+    let theme = scene.layout.options.theme;
+    let palette = Palette::new(theme);
+    let print = theme == Theme::Print;
     ensure!(
         [
             &metadata.title,
@@ -473,6 +805,8 @@ pub fn render_memory(
         .all(|s| s.chars().all(|c| !c.is_control())),
         "Metadata must be single-line printable text"
     );
+    let (callouts, unresolved_callouts, rail_width) = flick_callouts(scene, skin);
+    let callout_ids: BTreeSet<_> = callouts.iter().map(|v| v.note_id).collect();
     let pages = scene.layout.pages();
     let mut images = vec![];
     let mut missing = BTreeSet::new();
@@ -485,7 +819,13 @@ pub fn render_memory(
         .filter(|g| g.note.right <= 0. || g.note.left >= 24.)
         .count();
     for (page, range) in pages.iter().enumerate() {
-        let width = scene.layout.page_width(range.len())?;
+        let base_width = scene.layout.page_width(range.len())?;
+        let width = (base_width as f64 + rail_width * range.len() as f64).ceil();
+        ensure!(
+            width <= i32::MAX as f64,
+            "Flick rails exceed logical coordinate range"
+        );
+        let width = width as i32;
         let mut overflows: Vec<String> = vec![];
         // Reserve a legible appendix if an exceptionally dense column has more event
         // labels than can be placed beside it (common in tempo-ramp test charts).
@@ -505,24 +845,27 @@ pub fn render_memory(
         }
         let appendix_columns = ((width as usize).saturating_sub(40) / 220).clamp(1, 3);
         let appendix_rows = overflows.len().div_ceil(appendix_columns);
-        let height = scene.layout.height
-            + (appendix_rows as i32 * 17)
-            + if overflows.is_empty() { 0 } else { 36 };
-        ensure!(
-            height <= 32768 && width as i64 * height as i64 <= 64_000_000,
-            "Full sheet with annotation appendix exceeds image limits"
-        );
+        let appendix_height = i32::try_from(appendix_rows)?
+            .checked_mul(17)
+            .and_then(|h| h.checked_add(if overflows.is_empty() { 0 } else { 36 }))
+            .context("Annotation appendix height overflow")?;
+        let height = scene
+            .layout
+            .height
+            .checked_add(appendix_height)
+            .context("Logical image height overflow")?;
         overflow_count += overflows.len();
         let ss = scene.layout.options.supersample as i32;
-        ensure!(
-            width as i64 * height as i64 * (ss * ss) as i64 <= 256_000_000,
-            "Supersampled full sheet exceeds memory limit"
-        );
-        let mut surface = sk::surfaces::raster_n32_premul((width * ss, height * ss))
+        let scale = scene.layout.options.output_scale;
+        let (export_width, export_height) = scene
+            .layout
+            .options
+            .export_dimensions(width as f64, height as f64)?;
+        let mut surface = sk::surfaces::raster_n32_premul((export_width * ss, export_height * ss))
             .context("Cannot allocate page")?;
         let c = surface.canvas();
-        c.scale((ss as f32, ss as f32));
-        c.clear(BG);
+        c.scale(((ss as f64 * scale) as f32, (ss as f64 * scale) as f32));
+        c.clear(palette.background);
         let compact = width < 600;
         let cover_size = if compact { 52. } else { 80. };
         let text_x = if cover.is_some() {
@@ -560,7 +903,7 @@ pub fn render_memory(
             text_x,
             42.,
             if compact { 16. } else { 25. },
-            FG,
+            palette.text,
             true,
             content_width,
         );
@@ -582,7 +925,7 @@ pub fn render_memory(
             if compact { 20. } else { text_x },
             if compact { 89. } else { 65. },
             if compact { 9.5 } else { 11.5 },
-            MUTED,
+            palette.muted,
             false,
             if compact {
                 width as f32 - 40.
@@ -599,7 +942,16 @@ pub fn render_memory(
                     scene.statistics.reconstructed_full_combo
                 )
             });
-        fonts.draw(c, &fc, width as f64 - 205., 101., 10., MUTED, false, 185.);
+        fonts.draw(
+            c,
+            &fc,
+            (width as f64 - 205.).max(20.),
+            101.,
+            10.,
+            palette.muted,
+            false,
+            (width as f32 - 40.).min(185.),
+        );
         if !metadata.artist.is_empty() {
             fonts.draw(
                 c,
@@ -607,7 +959,7 @@ pub fn render_memory(
                 text_x,
                 if compact { 64. } else { 84. },
                 10.5,
-                MUTED,
+                palette.muted,
                 false,
                 content_width,
             );
@@ -619,13 +971,13 @@ pub fn render_memory(
                 20.,
                 118.,
                 10.,
-                MUTED,
+                palette.muted,
                 false,
                 width as f32 - 40.,
             );
         }
         // Compact visual legend instead of debug implementation text.
-        let ly = 141.;
+        let mut ly = if print { 131. } else { 141. };
         let labels = [
             ("TAP", Color::from_rgb(117, 199, 226)),
             ("SLIDE", Color::from_rgb(124, 148, 243)),
@@ -636,47 +988,71 @@ pub fn render_memory(
         ];
         let mut lx = 20.;
         for (label, color) in labels {
+            let color = if print {
+                match label {
+                    "TAP" => print_note_color("tap"),
+                    "SLIDE" => print_note_color("slide"),
+                    "FLICK" => print_note_color("flick"),
+                    "TRACE" => print_note_color("trace"),
+                    _ => Color::from_rgb(129, 78, 9),
+                }
+            } else {
+                color
+            };
             if lx + 80. > width as f64 {
-                break;
+                if print {
+                    lx = 20.;
+                    ly += 14.;
+                } else {
+                    break;
+                }
             }
             c.draw_circle((lx as f32 + 3., ly as f32 - 3.), 2.4, &paint(color));
-            fonts.draw(c, label, lx + 11., ly, 9., MUTED, false, 80.);
+            fonts.draw(c, label, lx + 11., ly, 9., palette.muted, false, 80.);
             lx += if label == "CRITICAL" { 83. } else { 66. };
         }
         stroke(
             c,
             (20., layout::HEADER - 31.),
             (width as f64 - 20., layout::HEADER - 31.),
-            Color::from_rgb(42, 55, 69),
+            palette.rule,
             0.8,
         );
-        fonts.draw(
-            c,
-            &format!("{:02} / {:02}", page + 1, pages.len()),
-            width as f64 - 83.,
-            layout::HEADER - 42.,
-            10.,
-            MUTED,
-            false,
-            64.,
-        );
+        if !print {
+            fonts.draw(
+                c,
+                &format!("{:02} / {:02}", page + 1, pages.len()),
+                width as f64 - 83.,
+                layout::HEADER - 42.,
+                10.,
+                palette.muted,
+                false,
+                64.,
+            );
+        }
         for (local, ci) in range.clone().enumerate() {
             let col = &scene.layout.columns[ci];
-            let x = layout::GAP + local as f64 * scene.layout.column_width + layout::LEFT;
+            let used_width =
+                range.len() as f64 * (scene.layout.column_width + rail_width) + layout::GAP;
+            let x = (width as f64 - used_width).max(0.) / 2.
+                + layout::GAP
+                + local as f64 * (scene.layout.column_width + rail_width)
+                + layout::LEFT;
             let track = 24. * scene.layout.options.pixels_per_lane;
+            let event_x = x + track + rail_width;
             let bottom = scene.layout.y(col, col.start as f64);
             let top = scene.layout.y(col, col.end as f64);
             let rect = Rect::new(x as f32, top as f32, (x + track) as f32, bottom as f32);
-            panel(c, rect, PANEL);
+            panel(c, rect, palette.panel);
             fonts.draw(
                 c,
                 &format!("{:03}—{:03}", col.first_bar, col.last_bar),
                 x,
                 layout::HEADER - 5.,
                 11.,
-                FG,
+                palette.text,
                 true,
-                track as f32,
+                (scene.layout.column_width - layout::LEFT - layout::GAP) as f32,
             );
             // Subtle alternating broad-lane bands; fine 24-lane divisions stay quiet.
             for i in [0, 2] {
@@ -687,7 +1063,11 @@ pub fn render_memory(
                         (6. * scene.layout.options.pixels_per_lane) as f32,
                         (bottom - top) as f32,
                     ),
-                    &paint(Color::from_argb(9, 152, 180, 213)),
+                    &paint(if print {
+                        Color::from_rgb(248, 249, 251)
+                    } else {
+                        Color::from_argb(9, 152, 180, 213)
+                    }),
                 );
             }
             for &(a, b) in &scene.fever {
@@ -700,7 +1080,11 @@ pub fn render_memory(
                 let y1 = scene.layout.y(col, lo as f64);
                 c.draw_rect(
                     Rect::new(x as f32, y0 as f32, (x + track) as f32, y1 as f32),
-                    &paint(Color::from_argb(9, 255, 205, 118)),
+                    &paint(if print {
+                        Color::from_argb(12, 202, 155, 60)
+                    } else {
+                        Color::from_argb(9, 255, 205, 118)
+                    }),
                 );
                 stroke(
                     c,
@@ -720,9 +1104,9 @@ pub fn render_memory(
                         bottom,
                     ),
                     if bold {
-                        Color::from_rgb(46, 60, 76)
+                        palette.lane
                     } else {
-                        Color::from_rgb(27, 38, 51)
+                        palette.fine_lane
                     },
                     if bold { 0.7 } else { 0.35 },
                 );
@@ -734,20 +1118,14 @@ pub fn render_memory(
                 .filter(|b| col.start <= b.tick && b.tick <= col.end)
             {
                 let y = scene.layout.y(col, bar.tick as f64);
-                stroke(
-                    c,
-                    (x, y),
-                    (x + track, y),
-                    Color::from_rgb(85, 103, 125),
-                    0.9,
-                );
+                stroke(c, (x, y), (x + track, y), palette.bar, 0.9);
                 fonts.draw(
                     c,
                     &format!("{:03}", bar.number),
                     x - 26.,
                     y + 3.,
                     9.5,
-                    MUTED,
+                    palette.muted,
                     false,
                     25.,
                 );
@@ -762,9 +1140,9 @@ pub fn render_memory(
                             (x, y),
                             (x + track, y),
                             if (tick - segment[0].tick) % 480 == 0 {
-                                Color::from_rgb(40, 54, 70)
+                                palette.beat
                             } else {
-                                Color::from_rgb(28, 40, 53)
+                                palette.subdivision
                             },
                             0.5,
                         );
@@ -793,7 +1171,11 @@ pub fn render_memory(
                             x + (b.left + b.right) / 2. * scene.layout.options.pixels_per_lane,
                             scene.layout.y(col, b.tick as f64),
                         ),
-                        Color::from_argb(108, 182, 201, 222),
+                        if print {
+                            Color::from_argb(140, 98, 112, 130)
+                        } else {
+                            Color::from_argb(108, 182, 201, 222)
+                        },
                         0.8,
                     );
                 }
@@ -814,6 +1196,9 @@ pub fn render_memory(
             for part in [NotePart::Body, NotePart::Arrow, NotePart::Mark] {
                 for glyph in scene.glyphs.iter().filter(|g| g.column == ci) {
                     let n = &glyph.note;
+                    if part == NotePart::Arrow && callout_ids.contains(&n.id) {
+                        continue;
+                    }
                     if n.right <= 0. || n.left >= 24. {
                         continue;
                     }
@@ -832,7 +1217,12 @@ pub fn render_memory(
                         native_critical: scene.layout.options.native_critical,
                         strict_assets: scene.layout.options.strict_assets,
                     };
-                    if skin.draw_preview_part(c, &request, part)? {
+                    let missing_arrow = if print {
+                        draw_print_note(c, skin, &request, part)?
+                    } else {
+                        skin.draw_preview_part(c, &request, part)?
+                    };
+                    if missing_arrow {
                         if scene.layout.options.strict_assets {
                             missing.insert(n.id);
                         } else {
@@ -842,6 +1232,32 @@ pub fn render_memory(
                 }
             }
             c.restore();
+            for callout in callouts.iter().filter(|v| v.column == ci) {
+                let note = ids[&callout.note_id];
+                let end_x = x + track + callout.offset_x;
+                let start_x = x + note.right.min(24.) * scene.layout.options.pixels_per_lane;
+                let mut leader = paint(palette.muted);
+                leader.set_stroke_width(0.7);
+                leader.set_path_effect(sk::PathEffect::dash(&[2., 2.], 0.));
+                c.draw_line(
+                    (start_x as f32, callout.y as f32),
+                    ((end_x - 13.) as f32, callout.y as f32),
+                    &leader,
+                );
+                c.draw_circle(
+                    (start_x as f32, callout.y as f32),
+                    1.4,
+                    &paint(palette.muted),
+                );
+                draw_callout(
+                    c,
+                    note,
+                    end_x,
+                    callout.y,
+                    scene.layout.options.arrow_height,
+                    theme,
+                );
+            }
             let (annotations, details) = display_events(scene, ci);
             let desired: Vec<f64> = annotations
                 .iter()
@@ -849,9 +1265,9 @@ pub fn render_memory(
                 .collect();
             let (ys, overflow) = pack_labels(&desired, top - 12., bottom + 18., 12.);
             for (a, &y) in annotations.iter().zip(&ys) {
-                let color = event_color(&a.kind);
+                let color = event_color(&a.kind, theme);
                 let anchor = scene.layout.y(col, a.tick as f64);
-                stroke(c, (x + track, anchor), (x + track + 4., y - 3.), color, 0.6);
+                stroke(c, (x + track, anchor), (event_x + 4., y - 3.), color, 0.6);
                 let label = if let Some(bpm) = a.label.strip_suffix(" BPM") {
                     bpm.trim_end_matches('0').trim_end_matches('.').to_owned()
                 } else {
@@ -864,7 +1280,7 @@ pub fn render_memory(
                 fonts.draw(
                     c,
                     &label,
-                    x + track + 6.,
+                    event_x + 6.,
                     y,
                     size,
                     color,
@@ -876,10 +1292,10 @@ pub fn render_memory(
                 fonts.draw(
                     c,
                     "↳ appendix",
-                    x + track + 4.,
+                    event_x + 4.,
                     bottom + 31.,
                     8.,
-                    MUTED,
+                    palette.muted,
                     false,
                     55.,
                 );
@@ -897,9 +1313,9 @@ pub fn render_memory(
                 x,
                 bottom + 20.,
                 9.,
-                MUTED,
+                palette.muted,
                 false,
-                80.,
+                (track as f32).min(80.),
             );
             let end_time = scene
                 .layout
@@ -911,12 +1327,12 @@ pub fn render_memory(
             fonts.draw(
                 c,
                 &format!("→  {}:{:02}", end_time / 60, end_time % 60),
-                x + track - 70.,
-                bottom + 20.,
+                if track < 140. { x } else { x + track - 70. },
+                bottom + if track < 140. { 34. } else { 20. },
                 9.,
-                MUTED,
+                palette.muted,
                 false,
-                70.,
+                (track as f32).min(70.),
             );
         }
         for (i, label) in overflows.iter().enumerate() {
@@ -929,21 +1345,25 @@ pub fn render_memory(
                 x,
                 y,
                 10.,
-                MUTED,
+                palette.muted,
                 false,
                 (width as f32 - 40.) / appendix_columns as f32 - 12.,
             );
         }
         fonts.draw(
             c,
-            &format!(
-                "moenotes bdon.moe  ·  {}  ·  upward / left to right",
-                skin.manifest.skin
-            ),
+            &if print {
+                "moenotes bdon.moe  ·  TIME ↑  COLUMNS →".to_owned()
+            } else {
+                format!(
+                    "moenotes bdon.moe  ·  {}  ·  upward / left to right",
+                    skin.manifest.skin
+                )
+            },
             20.,
             height as f64 - 15.,
             9.,
-            MUTED,
+            palette.muted,
             false,
             width as f32 - 40.,
         );
@@ -963,12 +1383,12 @@ pub fn render_memory(
         let image = if ss == 1 {
             hi
         } else {
-            let mut reduced =
-                sk::surfaces::raster_n32_premul((width, height)).context("Resize allocation")?;
+            let mut reduced = sk::surfaces::raster_n32_premul((export_width, export_height))
+                .context("Resize allocation")?;
             reduced.canvas().draw_image_rect_with_sampling_options(
                 &hi,
                 None,
-                Rect::from_wh(width as f32, height as f32),
+                Rect::from_wh(export_width as f32, export_height as f32),
                 sk::SamplingOptions::from(sk::CubicResampler::mitchell()),
                 &Paint::default(),
             );
@@ -990,8 +1410,10 @@ pub fn render_memory(
         });
         images.push(ImageReport {
             file: path.file_name().unwrap().to_string_lossy().into(),
-            width,
-            height,
+            width: export_width,
+            height: export_height,
+            logical_width: width,
+            logical_height: height,
             sha256: sha256(bytes.as_bytes()),
             columns: [range.start, range.end],
         });
@@ -1006,8 +1428,23 @@ pub fn render_memory(
                 .into(),
         );
     }
-    if overlap_count(scene) > 0 {
+    let (body_overlaps, structural_overlaps) = overlap_count(scene, skin);
+    let (inline_arrow_overlaps, _) = decoration_overlap_count(scene, skin, &BTreeSet::new());
+    let (arrow_overlaps, mark_overlaps) = decoration_overlap_count(scene, skin, &callout_ids);
+    if !callouts.is_empty() {
+        warnings.push(format!(
+            "{} dense Flick arrows shown in side rails with leaders; note coordinates unchanged",
+            callouts.len()
+        ));
+    }
+    if body_overlaps > structural_overlaps {
         warnings.push("Some body boxes still overlap at the selected density limit; increase spacing or lower note height".into());
+    }
+    if structural_overlaps > 0 {
+        warnings.push(format!("{structural_overlaps} near-coincident structural connection pairs retain their exact tick positions; these do not drive automatic spacing"));
+    }
+    if arrow_overlaps > 0 {
+        warnings.push("Some arrow/body boxes intersect at the selected spacing; see arrow_body_box_overlaps (conservative for external skins)".into());
     }
     if !missing.is_empty() {
         warnings.push(format!(
@@ -1048,9 +1485,14 @@ pub fn render_memory(
             unused_vertical_fraction: scene.layout.unused_vertical_fraction,
             track_width_fraction: 24. * scene.layout.options.pixels_per_lane
                 / scene.layout.column_width,
-            dense_body_overlaps: overlap_count(scene),
-            arrow_body_box_overlaps: decoration_overlap_count(scene).0,
-            mark_body_box_overlaps: decoration_overlap_count(scene).1,
+            dense_body_overlaps: body_overlaps,
+            structural_connection_overlaps: structural_overlaps,
+            arrow_body_box_overlaps: arrow_overlaps,
+            inline_arrow_body_box_overlaps: inline_arrow_overlaps,
+            flick_callouts: callouts,
+            unresolved_flick_note_ids: unresolved_callouts,
+            flick_rail_width: rail_width,
+            mark_body_box_overlaps: mark_overlaps,
             annotation_overflow: overflow_count,
             statistics: scene.statistics.clone(),
         },

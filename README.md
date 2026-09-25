@@ -3,11 +3,13 @@
 Render a rhythm chart as **one complete multi-column PNG** with cover art, song
 title, author credits, difficulty, CJK text and the `moenotes bdon.moe` footer.
 The renderer uses Rust, the vendored MoeNotes C17 parser and Skia CPU rendering.
+Version 0.3 also builds as a WASM SDK for integration into other frontends;
+this repository does not include a frontend application. See [WASM API](docs/WASM.md).
 
 **Artwork is work in progress.** The current visuals are a functional preview,
 not the final art direction or a pixel-identical reproduction of the game.
 
-![Synthetic full-chart preview](tests/golden/synthetic.png)
+![Synthetic print chart preview](tests/golden/synthetic-print.png)
 
 ## Quick start
 
@@ -42,6 +44,9 @@ moenotes-chart-renderer render chart.json.gz -o chart.png \
   --artist 'millsage' --author 'Music: 藤井健太郎' --cover cover.png
 
 moenotes-chart-renderer render chart.json -o mirrored.png --mirror
+moenotes-chart-renderer render chart.json -o screen.png --theme dark
+moenotes-chart-renderer render chart.json -o black.png --theme black
+moenotes-chart-renderer render chart.json -o large.png --theme white --output-scale 2
 moenotes-chart-renderer inspect chart.json -o parsed.json
 ```
 
@@ -51,10 +56,31 @@ There is **no chart pagination**. Oversized requests fail with a scale hint inst
 of silently splitting the chart or lowering image quality.
 
 Defaults: 64 px/beat, 10 px/lane, 8 px note body, 10 px arrow height and 2×
-supersampling. Auto-spacing can increase beat spacing for dense notes. Options
+supersampling. The two presets are `--theme white` (default) and `--theme black`
+(deep neutral black). `print` is an alias for white; `dark` retains the legacy
+blue-black screen palette. White uses white paper, dark text, fine grids,
+outlined notes and lightly filled slide ribbons. Built-in Flick arrows, double-line
+Trace notes, critical diamonds and dashed guides remain distinct in grayscale.
+External skins retain their source
+sprites; print mode adds body outlines, but their pale arrows may be less suitable
+for grayscale printing than the built-in artwork. PNG output remains one complete
+sheet; it is not automatically sized or paginated to a physical paper format.
+
+Auto-spacing reserves room for note bodies and centered Flick arrows, up to
+160 px/beat. Structural connection pairs only 1–2 ticks apart keep their true
+positions without forcing the entire chart to maximum spacing; remaining
+intersections are reported. Narrow sheets have a 360 px minimum canvas, centered
+tracks and stacked start/end times. Options
 include `--target-beats`, `--bars-per-column`, `--pixels-per-beat`,
 `--pixels-per-lane`, `--note-height`, `--arrow-height`, `--supersample`,
 `--fixed-spacing` and `--long` (one tall column). Run `--help` for the interface.
+See [print examples and validation](docs/PRINT.md) for grayscale and dense-chart
+boundaries.
+With the built-in skin, `--flick-layout callout` (default) moves colliding full-size
+Flick arrows into side rails connected to their source notes. Ticks and note
+bodies do not move. `--flick-layout inline` restores inline arrows. External
+skins retain their original arrows. `--output-scale 0.25..4` changes PNG pixel
+resolution independently of logical chart layout, with the same pixel budgets.
 
 `chart.render.json` records geometry/counts, warnings, image SHA-256 and metadata
 provenance. `--scene-json scene.json` writes the scene beside the image.
@@ -93,7 +119,8 @@ cover key and master FC. An ownerless or ambiguous score row produces an explici
 metadata error instead of inventing a song association.
 
 Covers are read locally from `Image/Jacket/KEY/` in the supplied by-key tree.
-This tool does not download or distribute game charts, covers or skin artwork.
+The renderer itself performs no network requests. Optional resource adapters can
+fetch chart/cover bytes from a configured object endpoint; see [online resources](docs/WASM.md#online-resources). No game resources are bundled.
 Missing requested covers are errors. For another metadata source:
 
 ```json
@@ -104,6 +131,9 @@ Missing requested covers are errors. For another metadata source:
 Use `--metadata file.json`; its relative cover path resolves beside that file.
 Precedence is explicit CLI fields, then metadata JSON, then masterdata. Without
 metadata only the chart filename is used as a title; authors/levels are not guessed.
+An explicit `--cover` or JSON `cover` overrides master cover lookup even when the
+by-key tree has no corresponding jacket. JSON `"cover": null` removes the cover.
+Duplicate music/difficulty associations are rejected rather than selecting a row.
 
 The default skin is `builtin`. Prepared external game packs are optional:
 
@@ -122,8 +152,9 @@ reported vector fallback is used unless `--strict-assets` is selected.
 
 A complete online-masterdata run on Linux/WSL2, i7-11800H, tested all **340 score
 rows in each of three regions: 1,020 single-image renders, zero failures**. It used
-skin001, cover/credits, default full-quality settings and sequential fresh CLI
+the original dark theme, skin001, cover/credits, full-quality settings and sequential fresh CLI
 processes. The same 340 locally retained chart files were reused across regions.
+These historical timings precede the print theme and updated auto-spacing.
 
 | Per-chart measurement | Median | P95 | Maximum |
 | --- | ---: | ---: | ---: |

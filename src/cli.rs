@@ -9,7 +9,7 @@ use anyhow::{Context, Result, bail, ensure};
 use std::{ffi::OsString, fs, path::PathBuf};
 
 pub fn help() -> &'static str {
-    "moenotes-chart-renderer render CHART -o IMAGE.png [OPTIONS]\n  --skin builtin|skin001|skin002|skin003  --packs DIR  --mirror\n  --target-beats N (24)  --bars-per-column N (explicit override)\n  --pixels-per-beat N (64) --pixels-per-lane N (10)\n  --note-height N (8) --arrow-height N (10) --supersample 1|2|3 (2)\n  --long (single column; default is a complete multi-column image)\n  --curve-mode musical|native-parameters --strict-assets --native-critical --fixed-spacing\n  --title TEXT --difficulty TEXT --level TEXT --artist TEXT --author TEXT --cover IMAGE --metadata JSON\n  --masterdata SNAPSHOT_DIR --chart-key KEY --language ja|en|zh-Hant|zh-Hans|ko --assets BY_KEY_DIR\n  --scene-json FILE\nmoenotes-chart-renderer inspect CHART [-o REPORT.json] [--mirror]\nmoenotes-chart-renderer samples [PACK_DIRECTORY] [OUTPUT_DIRECTORY]\n"
+    "moenotes-chart-renderer render CHART -o IMAGE.png [OPTIONS]\n  --skin builtin|skin001|skin002|skin003  --packs DIR  --mirror\n  --theme white|black (white), legacy print|dark aliases\n  --flick-layout callout|inline (callout)\n  --target-beats N (24)  --bars-per-column N (explicit override)\n  --pixels-per-beat N (64) --pixels-per-lane N (10)\n  --note-height N (8) --arrow-height N (10) --supersample 1|2|3 (2)\n  --long (single column; default is a complete multi-column image)\n  --curve-mode musical|native-parameters --strict-assets --native-critical --fixed-spacing\n  --title TEXT --difficulty TEXT --level TEXT --artist TEXT --author TEXT --cover IMAGE --metadata JSON\n  --masterdata SNAPSHOT_DIR --chart-key KEY --language ja|en|zh-Hant|zh-Hans|ko --assets BY_KEY_DIR\n  --scene-json FILE --output-scale 0.25..4 (1)\nmoenotes-chart-renderer inspect CHART [-o REPORT.json] [--mirror]\nmoenotes-chart-renderer samples [PACK_DIRECTORY] [OUTPUT_DIRECTORY]\n"
 }
 pub fn run(args: &[OsString]) -> Result<()> {
     let command = args[0].to_str().context("Command must be UTF-8")?;
@@ -87,8 +87,24 @@ pub fn run(args: &[OsString]) -> Result<()> {
                 );
             }
             "--target-beats" => options.target_beats = string()?.parse()?,
+            "--theme" => {
+                options.theme = match string()? {
+                    "white" | "print" => crate::layout::Theme::Print,
+                    "black" => crate::layout::Theme::Black,
+                    "dark" => crate::layout::Theme::Dark,
+                    _ => bail!("Theme must be white, black, or legacy dark"),
+                }
+            }
+            "--flick-layout" => {
+                options.flick_layout = match string()? {
+                    "callout" => crate::layout::FlickLayout::Callout,
+                    "inline" => crate::layout::FlickLayout::Inline,
+                    _ => bail!("Flick layout must be callout or inline"),
+                }
+            }
             "--note-height" => options.note_height = string()?.parse()?,
             "--arrow-height" => options.arrow_height = string()?.parse()?,
+            "--output-scale" => options.output_scale = string()?.parse()?,
             "--supersample" => options.supersample = string()?.parse()?,
             "--curve-mode" => {
                 options.curve_mode = match string()? {
@@ -157,14 +173,35 @@ pub fn run(args: &[OsString]) -> Result<()> {
         ["builtin", "skin001", "skin002", "skin003"].contains(&skin.as_str()),
         "Unknown skin"
     );
+    // Resolve cover precedence before asking masterdata to locate a cover.
+    // An explicit null in the JSON overlay intentionally removes that cover.
+    let overlay: Option<serde_json::Value> = meta_path
+        .as_ref()
+        .map(|path| -> Result<_> {
+            let value: serde_json::Value = serde_json::from_slice(&fs::read(path)?)?;
+            ensure!(value.is_object(), "Metadata must be an object");
+            Ok(value)
+        })
+        .transpose()?;
+    let cover_overridden =
+        cover_path.is_some() || overlay.as_ref().is_some_and(|v| v.get("cover").is_some());
     if let Some(dir) = &masterdata {
         let key = chart_key
             .as_deref()
             .context("--masterdata requires --chart-key")?;
-        metadata = crate::metadata::resolve(dir, key, &language, assets.as_deref())?.metadata;
+        metadata = crate::metadata::resolve(
+            dir,
+            key,
+            &language,
+            if cover_overridden {
+                None
+            } else {
+                assets.as_deref()
+            },
+        )?
+        .metadata;
     }
-    if let Some(path) = &meta_path {
-        let overlay: serde_json::Value = serde_json::from_slice(&fs::read(path)?)?;
+    if let (Some(path), Some(overlay)) = (&meta_path, overlay) {
         let mut base = serde_json::to_value(&metadata)?;
         for (k, v) in overlay.as_object().context("Metadata must be an object")? {
             base[k] = v.clone();
@@ -213,10 +250,10 @@ pub fn run(args: &[OsString]) -> Result<()> {
     let scene_started = std::time::Instant::now();
     let model = Scene::build(&score, Layout::build(&score, options)?)?;
     let scene_seconds = scene_started.elapsed().as_secs_f64();
-    let pack_dir = crate::resources::pack_directory(packs.as_deref())?;
     let skin = if skin == "builtin" {
         Skin::builtin()?
     } else {
+        let pack_dir = crate::resources::pack_directory(packs.as_deref())?;
         Skin::load(
             &pack_dir
                 .context("Game skin requires --packs or MOENOTES_ASSETS_DIR")?

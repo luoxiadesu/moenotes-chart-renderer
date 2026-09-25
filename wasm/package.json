@@ -1,0 +1,9 @@
+{
+  "name": "@moenotes/chart-renderer",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "exports": {".": {"types": "./renderer.d.ts", "default": "./renderer.mjs"}, "./resources": {"types": "./resources.d.ts", "default": "./resources.mjs"}},
+  "files": ["*.mjs", "*.wasm", "*.d.ts", "manifest.json", "LICENSE", "README.md", "THIRD_PARTY.md", "font-notices/**", "licenses/**"],
+  "license": "MIT"
+}

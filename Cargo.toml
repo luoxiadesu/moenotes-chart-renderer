@@ -1,6 +1,7 @@
 [package]
 name = "moenotes-chart-renderer"
-version = "0.2.0"
+version = "0.3.0"
+default-run = "moenotes-chart-renderer"
 edition = "2024"
 rust-version = "1.98"
 publish = false
@@ -9,7 +10,7 @@ description = "Render rhythm charts as complete multi-column PNG sheets"
 repository = "https://github.com/luoxiadesu/moenotes-chart-renderer"
 homepage = "https://bdon.moe"
 readme = "README.md"
-include = ["src/**", "vendor/**", "assets/**", "build.rs", "Cargo.toml", "Cargo.lock", "LICENSE", "THIRD_PARTY.md", "README.md", "docs/**"]
+include = ["src/**", "vendor/**", "assets/**", "build.rs", "Cargo.toml", "Cargo.lock", "LICENSE", "THIRD_PARTY.md", "README.md", "docs/**", "wasm/**", "scripts/build_wasm.py", "scripts/wasm_linker.py"]
 
 [dependencies]
 anyhow = "1"
@@ -18,6 +19,8 @@ serde_json = "1"
 sha2 = "0.10"
 skia-safe = "=0.153.3"
 libz-sys = { version = "=1.1.29", features = ["static"] }
+
+[target.'cfg(not(target_os = "emscripten"))'.dependencies]
 fs2 = "=0.4.3"
 
 [build-dependencies]
@@ -25,6 +28,12 @@ cc = "=1.4.7"
 
 [features]
 research-tests = []
+wasm = []
+
+[[bin]]
+name = "moenotes-wasm"
+path = "src/bin/wasm.rs"
+required-features = ["wasm"]
 
 [profile.release]
 strip = true

@@ -46,6 +46,7 @@ pub struct moenotes_allocator {
     pub free_fn: moenotes_free_fn,
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
+#[cfg(target_pointer_width = "64")]
 const _: () = {
     ["Size of moenotes_allocator"][::std::mem::size_of::<moenotes_allocator>() - 32usize];
     ["Alignment of moenotes_allocator"][::std::mem::align_of::<moenotes_allocator>() - 8usize];
@@ -57,6 +58,14 @@ const _: () = {
         [::std::mem::offset_of!(moenotes_allocator, realloc_fn) - 16usize];
     ["Offset of field: moenotes_allocator::free_fn"]
         [::std::mem::offset_of!(moenotes_allocator, free_fn) - 24usize];
+};
+#[cfg(target_os = "emscripten")]
+const _: () = {
+    assert!(::std::mem::size_of::<moenotes_allocator>() == 16);
+    assert!(::std::mem::align_of::<moenotes_allocator>() == 4);
+    assert!(::std::mem::offset_of!(moenotes_allocator, malloc_fn) == 4);
+    assert!(::std::mem::offset_of!(moenotes_allocator, realloc_fn) == 8);
+    assert!(::std::mem::offset_of!(moenotes_allocator, free_fn) == 12);
 };
 impl Default for moenotes_allocator {
     fn default() -> Self {

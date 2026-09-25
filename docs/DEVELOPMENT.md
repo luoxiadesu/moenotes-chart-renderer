@@ -17,6 +17,10 @@ cargo build --release --locked
 python3 -m unittest discover -s tests -p 'test_*.py'
 python3 scripts/verify_release.py --binary target/release/moenotes-chart-renderer
 python3 scripts/check_golden.py --binary target/release/moenotes-chart-renderer
+# On Linux, also check the reviewed print baselines.
+python3 scripts/check_golden.py --binary target/release/moenotes-chart-renderer --theme print
+python3 scripts/check_golden.py --binary target/release/moenotes-chart-renderer --theme print --narrow
+python3 scripts/check_golden.py --binary target/release/moenotes-chart-renderer --theme black
 git diff --check
 ```
 
@@ -39,6 +43,13 @@ a golden explicitly and review the change before committing it.
 `check_golden.py --update` updates only the current platform's complete sheet.
 Record its source commit/runner and hash in `tests/golden/README.md` after review;
 never update a failing baseline automatically in CI.
+Print pixel baselines currently exist only for Linux. On another native platform,
+review its complete print outputs before establishing platform-specific baselines;
+keep running the existing native dark baseline and default-print API/CLI tests.
+
+When changing rendering or the WASM boundary, build with `scripts/build_wasm.py`,
+run `node tests/wasm-smoke.mjs`, and run `scripts/check_wasm_browser.py` with
+Playwright/Chromium. These tests exercise the SDK without adding a frontend app.
 
 CI uploads only synthetic artifacts and code packages. Public source push does
 not authorize a tag, GitHub Release, container deployment or game-asset upload.

@@ -1,11 +1,40 @@
 # Reviewed complete-sheet baselines
 
+## Print theme
+
+`synthetic-print.png` is the default print theme (1032 x 547); the complete
+single-column `synthetic-print-narrow.png` (360 x 883) exercises minimum lane width,
+cover, CJK title, FC, wrapped legend and stacked timestamps. Both were rendered
+and visually reviewed on Linux x86_64 / FreeType with Rust 1.98.1 and Skia 0.153.3
+on 2026-09-25, from the local print-theme changes based on `5d6a450`.
+
+| File | SHA-256 |
+| --- | --- |
+| synthetic-print.png | b07aaf2944bc5dc5e384cd4aacbe3e9fa56464af3ed03411dd5e784c6d56582b |
+| synthetic-print-narrow.png | c220fe840405a6ebf831609d73d35412d9803da824c25c9879df1386cfef115e |
+
+Use `--theme print` and optionally `--narrow` with `check_golden.py` to check them.
+These remain complete images; the narrow case is not a crop or page. Linux CI
+checks both. Windows/macOS run print rendering/API checks but do not yet have
+reviewed print pixel baselines; their native dark baselines below remain active.
+Do not copy Linux print pixels into a purported native baseline.
+
+## Deep black preset
+
+`synthetic-black.png` is the new neutral deep-black preset, reviewed on Linux
+with Rust 1.98.1 / Skia 0.153.3 on 2026-09-25. SHA-256:
+`ff8e7874cd80292325cbd9fc36e0cff1f7d2444115d29e41ffce4962d2c3eaf9`.
+It is the same complete 1032 x 547 synthetic sheet. Check it with `--theme black`.
+Native Windows/macOS black pixel baselines have not yet been reviewed.
+
+## Legacy dark theme
+
 All images are the same original synthetic chart, cover and metadata from
 `tests/fixtures`, rendered as one complete three-column PNG (1032 x 547).
 They contain no game assets. Artwork remains under development.
 
 Run `python scripts/check_golden.py --binary <binary>` to compare against the
-current platform's baseline. `--update` explicitly replaces that baseline for
+current platform's dark baseline. `--update` explicitly replaces that baseline for
 manual review. CI never updates baselines. All platforms keep the same mean
 absolute channel error limit of 1.0 on the 0-255 scale; dimensions must match.
 

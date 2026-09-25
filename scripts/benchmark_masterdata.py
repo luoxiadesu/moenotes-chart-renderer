@@ -63,7 +63,7 @@ def benchmark(args):
                              "master_level": score.get("_musicScoreDisplayLevel"), "master_full_combo": score.get("_fullComboCount"),
                              "master_commit": commit, "master_version": provenance["version"]})
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    settings = {"mode": "complete multi-column single PNG", "skin": args.skin,
+    settings = {"mode": "complete multi-column single PNG", "skin": args.skin, "theme": args.theme,
                 "pixels_per_beat": 64, "pixels_per_lane": 10, "note_height": 8, "arrow_height": 10,
                 "supersample": 2, "auto_spacing": True, "mirror": False,
                 "processes": 1, "chart_source": "local assets; not claimed to be freshly downloaded CDN charts"}
@@ -78,7 +78,7 @@ def benchmark(args):
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 timing = destination.with_suffix(".time.txt")
                 command = [str(args.binary.resolve()), "render", item["input"], "-o", str(destination), "--skin", args.skin,
-                           "--timings", "--supersample", "2"]
+                           "--timings", "--supersample", "2", "--theme", args.theme]
                 if args.packs:
                     command += ["--packs", str(args.packs.resolve())]
                 if item["has_music_metadata"]:
@@ -150,6 +150,7 @@ def main():
     parser.add_argument("--assets", type=Path, required=True)
     parser.add_argument("--packs", type=Path)
     parser.add_argument("--skin", default="builtin")
+    parser.add_argument("--theme", choices=["white", "black", "print", "dark"], default="white")
     parser.add_argument("--region", choices=REGIONS + ["all"], default="all")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()

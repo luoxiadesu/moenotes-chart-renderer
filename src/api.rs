@@ -1,7 +1,7 @@
 //! Supported embedding interface. Rendering returns owned PNG bytes and a report;
 //! A chart produces exactly one complete multi-column PNG.
 //! It performs no output writes and makes no network requests.
-pub use crate::layout::{CurveMode, Options as RenderOptions};
+pub use crate::layout::{CurveMode, FlickLayout, Options as RenderOptions, Theme};
 pub use crate::render::{Metadata, Page, Rendered, Report};
 use crate::{layout::Layout, parser::Score, render, scene::Scene, skin::Skin, typography::Fonts};
 use std::{fmt, path::Path};
@@ -34,7 +34,31 @@ pub struct Renderer {
     skin: Skin,
     fonts: Fonts,
 }
+/// Serializable byte-in request shared by native and future browser workers.
+/// Resource fetching and viewport zoom remain the host's responsibility.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RenderRequest {
+    pub chart: Vec<u8>,
+    #[serde(default)]
+    pub options: RenderOptions,
+    pub metadata: Metadata,
+    #[serde(default)]
+    pub mirror: bool,
+    #[serde(default)]
+    pub cover: Option<Vec<u8>>,
+}
 impl Renderer {
+    pub fn render_request(&self, request: &RenderRequest) -> Result<Rendered, Error> {
+        self.render(
+            &request.chart,
+            request.options.clone(),
+            request.metadata.clone(),
+            request.mirror,
+            "chart.png",
+            request.cover.as_deref(),
+        )
+    }
     pub fn builtin() -> Result<Self, Error> {
         Ok(Self {
             skin: Skin::builtin().map_err(|e| err(ErrorKind::Resources, e))?,

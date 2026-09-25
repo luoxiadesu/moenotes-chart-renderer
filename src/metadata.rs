@@ -11,6 +11,7 @@ use std::{
 pub struct Resolved {
     pub metadata: Metadata,
     pub cover: Option<PathBuf>,
+    pub jacket_key: String,
 }
 fn table(dir: &Path, name: &str) -> Result<Vec<Value>> {
     ensure!(
@@ -113,15 +114,21 @@ pub fn resolve(
         ("_hardID", "HARD"),
         ("_expertID", "EXPERT"),
     ];
-    let (music, difficulty) = musics
+    let owners: Vec<_> = musics
         .iter()
-        .find_map(|m| {
-            difficulties
-                .iter()
-                .find(|(key, _)| m[*key].as_i64() == Some(sid))
-                .map(|(_, label)| (m, *label))
+        .flat_map(|m| {
+            difficulties.iter().filter_map(move |(key, label)| {
+                (m[*key].as_i64() == Some(sid)).then_some((m, *label))
+            })
         })
-        .context("Score has no music")?;
+        .collect();
+    ensure!(!owners.is_empty(), "Score has no music");
+    ensure!(
+        owners.len() == 1,
+        "Ambiguous score owner: score {sid} has {} music/difficulty associations",
+        owners.len()
+    );
+    let (music, difficulty) = owners[0];
     let lang = match language {
         "ja" => "_japanese",
         "en" => "_english",
@@ -216,5 +223,9 @@ pub fn resolve(
         master_full_combo: score["_fullComboCount"].as_u64(),
         provenance: Some(provenance),
     };
-    Ok(Resolved { metadata, cover })
+    Ok(Resolved {
+        metadata,
+        cover,
+        jacket_key: jacket,
+    })
 }

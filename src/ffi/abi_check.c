@@ -1,6 +1,13 @@
 #include "moenotes_chart_parser.h"
 #include <stddef.h>
-_Static_assert(sizeof(void*) == 8, "64-bit ABI required");
+#ifdef __EMSCRIPTEN__
+_Static_assert(sizeof(void*) == 4, "wasm32 ABI required");
+_Static_assert(sizeof(moenotes_allocator_t) == 16, "wasm allocator ABI changed");
+_Static_assert(offsetof(moenotes_allocator_t, free_fn) == 12, "wasm allocator offset changed");
+#else
+_Static_assert(sizeof(void*) == 8, "64-bit native ABI required");
+_Static_assert(sizeof(moenotes_allocator_t) == 32, "native allocator ABI changed");
+#endif
 _Static_assert(sizeof(moenotes_parse_options_t) == 12, "options ABI changed");
 _Static_assert(sizeof(moenotes_position_t) == 32, "position ABI changed");
 _Static_assert(sizeof(moenotes_note_view_t) == 136, "note ABI changed");

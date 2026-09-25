@@ -64,10 +64,20 @@ impl Fonts {
     ) {
         let mut text = s.to_owned();
         if self.width(&text, size, bold) > max {
-            while !text.is_empty() && self.width(&format!("{text}…"), size, bold) > max {
-                text.pop();
-            }
-            if self.width("…", size, bold) <= max {
+            let ellipsis = self.width("…", size, bold);
+            let mut used = ellipsis;
+            let end = text
+                .char_indices()
+                .find_map(|(i, ch)| {
+                    used += self
+                        .font(ch, size, bold)
+                        .measure_str(ch.to_string(), None)
+                        .0;
+                    (used > max).then_some(i)
+                })
+                .unwrap_or(text.len());
+            text.truncate(end);
+            if ellipsis <= max {
                 text.push('…');
             } else {
                 text.clear();

@@ -110,7 +110,7 @@ def main():
             for region in REGIONS if args.region == "all" else [args.region]:
                 sync(region, args.output, commit)
                 print(f"{region}: {commit} -> {(args.output / region).resolve()}", flush=True)
-        except OSError as error:
+        except (OSError, ValueError, KeyError, TypeError) as error:
             if not args.watch:
                 raise
             print(f"Update failed; previous complete snapshot retained: {error}", flush=True)

@@ -1,4 +1,4 @@
-# Validation status for the 0.2.0 candidate
+# Validation status for the 0.3.0 candidate
 
 ## Test coverage
 
@@ -27,7 +27,33 @@ documentation, relocation and synthetic visual checks. Check the repository's
 Actions run for current platform results; configuration alone is not proof of
 cross-platform correctness. Public-source checks follow DEVELOPMENT.md.
 
+## WASM and dense Flick follow-up
+
+The built-in callout layout rendered all 340 retained charts, preserving glyph,
+branch and FC counts. All 140 previously colliding arrows across 8 charts were
+placed into rails with zero remaining arrow/body intersections or unresolved
+callouts. Near-coincident structural connections remain explicitly counted.
+Native regression tests cover themes, export scaling, callout layout and metadata.
+
+The wasm32-unknown-emscripten SDK passes Node runtime tests and headless Chromium
+module-Worker rendering/PNG decode, including a chart/cover downloaded from the
+configured online endpoint. See [WASM.md](WASM.md) for target, memory, CORS and
+browser support limits. There is no frontend application in this repository.
+Native and WASM CI jobs validate source pushes. Consult the current Actions run
+for remote results; local validation alone does not imply those jobs passed.
+
+Export-budget regressions cover logical sheets above 64M pixels, logical dimensions
+above 32768, rounding at the final-pixel limit, and supersampled allocations.
+Native and WASM rendering verify downscaled complete sheets and reject the same
+input at an excessive export scale. Build-tool tests cover custom Cargo artifact
+paths and refusal to substitute stale or missing output.
+
 ## Deliberate boundaries
+
+- The print theme has reviewed Linux complete and narrow visual baselines. Its
+  Windows/macOS pixel baselines and physical printer output are not yet verified.
+  Native dark baselines are retained; the new default print path has portable
+  API/CLI tests. See the golden README for exact scope and provenance.
 
 - Actual source alpha animation and absolute Call scheduling remain unverified;
   static overview shows fade flags and relative Call fractions explicitly.

@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import sys
 from unittest.mock import patch
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/sync_masterdata.py"
@@ -14,6 +15,15 @@ spec.loader.exec_module(sync)
 
 
 class Updates(unittest.TestCase):
+    def test_watch_recovers_after_invalid_table(self):
+        with tempfile.TemporaryDirectory() as temp, \
+             patch.object(sys, "argv", ["sync_masterdata.py", "--watch", "--region", "en", "--output", temp]), \
+             patch.object(sync, "head_commit", return_value="a" * 40), \
+             patch.object(sync, "sync", side_effect=[ValueError("invalid table"), Path(temp)]) as refresh, \
+             patch.object(sync.time, "sleep", side_effect=[None, KeyboardInterrupt]):
+            with self.assertRaises(KeyboardInterrupt):
+                sync.main()
+            self.assertEqual(refresh.call_count, 2)
     def response(self, url):
         if url.endswith("current_version.json"):
             return json.dumps({"regions": {"en": {"data_path": "en", "version": "test", "resource_version": "test", "verified_at": "test"}}}).encode()

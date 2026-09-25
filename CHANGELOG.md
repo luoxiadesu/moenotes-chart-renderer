@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0 — source preview
+
+- WASM32 Emscripten SDK with typed byte input/PNG output, CJK fonts, resource
+  adapters and viewport math for other frontends; no application UI.
+- White/deep-black presets, independent export scale and dense Flick side rails.
+- Validate final and supersampled pixel budgets after export scaling, including
+  rails/appendices; large logical sheets can be exported at a smaller resolution.
+- Package the exact Cargo-reported WASM artifacts, including custom target
+  directories from environment/configuration, without stale default-path fallback.
+- Watch-mode recovery after invalid JSON/table/cache errors.
+- Default white print theme with dark outlines, low-ink grids/ribbons, distinct
+  Trace/critical/guide shapes and retained `--theme dark` screen rendering.
+- Fix ambiguous music/difficulty ownership, cover precedence before master
+  jacket lookup, and stale external-pack settings breaking the built-in skin.
+- Keep narrow-sheet metadata on the canvas; center tracks and stack timestamps.
+- Reserve Flick arrow clearance; do not stretch entire charts for structural
+  connection pairs 1–2 ticks apart. Preserve exact ticks and report intersections.
+- Match collision body bounds to the selected artwork; make text truncation
+  linear in label length and enforce the 64-million-pixel final PNG limit.
+- Add CLI regressions and reviewed Linux complete/narrow print baselines.
+  Existing native dark baselines remain in use on all three platforms.
+
 ## 0.2.0 — initial public source preview
 
 - Cross-platform build review: isolate the parser-private `sig_t` typedef from

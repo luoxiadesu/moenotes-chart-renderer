@@ -2,6 +2,9 @@
 
 Measured 2026-09-25 (Asia/Tokyo). The acceptance unit is **one complete multi-column
 PNG per score row**, never paginated. Artwork is still under development.
+This historical run used the original dark theme and spacing algorithm before
+the print refinement. It is not a new benchmark of the current default print
+theme. See [PRINT.md](PRINT.md) for the later retained-corpus regression scope.
 
 ## Inputs and coverage
 
@@ -56,7 +59,7 @@ only this aggregate report and reusable benchmark code are public.
 
 ```sh
 python3 scripts/benchmark_masterdata.py --binary ./moenotes-chart-renderer \
-  --assets /path/to/by-key --packs /path/to/packs --skin skin001 \
+  --assets /path/to/by-key --packs /path/to/packs --skin skin001 --theme dark \
   --region all --output output/benchmark
 ```
 

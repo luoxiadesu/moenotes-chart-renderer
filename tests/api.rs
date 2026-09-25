@@ -1,6 +1,237 @@
 use moenotes_chart_renderer::api::{ErrorKind, Metadata, RenderOptions, Renderer};
 const CHART: &[u8] = include_bytes!("fixtures/synthetic.json");
 #[test]
+fn large_logical_sheet_can_be_exported_below_pixel_budget() {
+    let chart = br#"{"events":{},"notes":[{"t":690720,"pos":4,"size":6}]}"#;
+    let renderer = Renderer::builtin().unwrap();
+    let options = RenderOptions {
+        pixels_per_beat: 160.,
+        auto_spacing: false,
+        output_scale: 0.5,
+        supersample: 1,
+        ..RenderOptions::default()
+    };
+    let metadata = Metadata {
+        title: "Large logical sheet".into(),
+        ..Metadata::default()
+    };
+    let result = renderer
+        .render(
+            chart,
+            options.clone(),
+            metadata.clone(),
+            false,
+            "large.png",
+            None,
+        )
+        .unwrap();
+    assert_eq!(result.pages.len(), 1);
+    let image = &result.report.images[0];
+    assert!(image.logical_width as i64 * image.logical_height as i64 > 64_000_000);
+    assert_eq!((image.width, image.height), (10206, 2071));
+    assert_eq!(result.report.glyphs, 1);
+    let error = renderer
+        .render(
+            chart,
+            RenderOptions {
+                output_scale: 1.,
+                ..options
+            },
+            metadata,
+            false,
+            "large.png",
+            None,
+        )
+        .err()
+        .unwrap();
+    assert_eq!(error.kind, ErrorKind::Layout);
+    assert!(error.message.contains("Scaled PNG exceeds"));
+}
+#[test]
+fn dense_flick_callouts_preserve_counts_and_separate_arrows() {
+    use moenotes_chart_renderer::api::{FlickLayout, Theme};
+    let chart=br#"{"events":{},"notes":[{"type":"flick","dir":"right","t":480,"pos":4,"size":8},{"type":"flick","dir":"left","t":510,"pos":4,"size":8},{"type":"tap","t":540,"pos":4,"size":8}]}"#;
+    let renderer = Renderer::builtin().unwrap();
+    let mut counts = vec![];
+    for theme in [Theme::Print, Theme::Black] {
+        for mode in [FlickLayout::Inline, FlickLayout::Callout] {
+            let r = renderer
+                .render(
+                    chart,
+                    RenderOptions {
+                        theme,
+                        flick_layout: mode,
+                        supersample: 1,
+                        ..RenderOptions::default()
+                    },
+                    Metadata {
+                        title: "Dense Flick".into(),
+                        ..Metadata::default()
+                    },
+                    false,
+                    "dense.png",
+                    None,
+                )
+                .unwrap()
+                .report;
+            counts.push(r.statistics.reconstructed_full_combo);
+            assert!(r.inline_arrow_body_box_overlaps > 0);
+            if mode == FlickLayout::Callout {
+                assert_eq!(r.arrow_body_box_overlaps, 0);
+                assert_eq!(r.flick_callouts.len(), 2);
+                assert!(r.unresolved_flick_note_ids.is_empty());
+                assert_ne!(r.flick_callouts[0].offset_x, r.flick_callouts[1].offset_x);
+            } else {
+                assert!(r.arrow_body_box_overlaps > 0);
+                assert!(r.flick_callouts.is_empty());
+            }
+        }
+    }
+    assert!(counts.iter().all(|n| *n == counts[0]));
+}
+
+#[test]
+fn export_scale_changes_pixels_without_reflowing_chart() {
+    let renderer = Renderer::builtin().unwrap();
+    let mut results = vec![];
+    for scale in [0.5, 1., 2.] {
+        let result = renderer
+            .render(
+                CHART,
+                RenderOptions {
+                    output_scale: scale,
+                    supersample: 1,
+                    ..RenderOptions::default()
+                },
+                Metadata {
+                    title: "Export".into(),
+                    ..Metadata::default()
+                },
+                false,
+                "scale.png",
+                None,
+            )
+            .unwrap();
+        let image = &result.report.images[0];
+        assert_eq!(
+            image.width,
+            (image.logical_width as f64 * scale).ceil() as i32
+        );
+        assert_eq!(
+            image.height,
+            (image.logical_height as f64 * scale).ceil() as i32
+        );
+        results.push((
+            image.logical_width,
+            image.logical_height,
+            result.report.glyphs,
+        ));
+    }
+    assert!(results.iter().all(|r| *r == results[0]));
+}
+
+#[test]
+fn white_native_critical_flag_is_applied() {
+    let renderer = Renderer::builtin().unwrap();
+    let mut pngs = vec![];
+    for native_critical in [false, true] {
+        let r = renderer
+            .render(
+                CHART,
+                RenderOptions {
+                    native_critical,
+                    supersample: 1,
+                    ..RenderOptions::default()
+                },
+                Metadata {
+                    title: "Critical".into(),
+                    ..Metadata::default()
+                },
+                false,
+                "c.png",
+                None,
+            )
+            .unwrap();
+        pngs.push(r.pages[0].png.clone());
+    }
+    assert_ne!(pngs[0], pngs[1]);
+}
+#[test]
+fn print_and_dark_keep_the_same_chart_counts() {
+    use moenotes_chart_renderer::api::Theme;
+    let renderer = Renderer::builtin().unwrap();
+    let mut reports = vec![];
+    let mut pngs = vec![];
+    for theme in [Theme::Print, Theme::Dark] {
+        let result = renderer
+            .render(
+                CHART,
+                RenderOptions {
+                    theme,
+                    supersample: 1,
+                    ..RenderOptions::default()
+                },
+                Metadata {
+                    title: "Theme parity".into(),
+                    ..Metadata::default()
+                },
+                true,
+                "sheet.png",
+                None,
+            )
+            .unwrap();
+        assert_eq!(result.pages.len(), 1);
+        pngs.push(result.pages[0].png.clone());
+        reports.push(result.report);
+    }
+    assert_ne!(pngs[0], pngs[1]);
+    assert_eq!(reports[0].glyphs, reports[1].glyphs);
+    assert_eq!(reports[0].branches, reports[1].branches);
+    assert_eq!(
+        reports[0].statistics.reconstructed_full_combo,
+        reports[1].statistics.reconstructed_full_combo
+    );
+    assert_eq!(reports[0].images[0].width, reports[1].images[0].width);
+}
+
+#[test]
+fn structural_overlaps_remain_visible_and_judgement_overlaps_still_warn() {
+    let renderer = Renderer::builtin().unwrap();
+    let chart = br#"{"events":{},"notes":[{"type":"long","node":[{"t":0,"pos":0,"size":6},{"t":480,"pos":0,"size":6},{"t":481,"pos":0,"size":6},{"t":1920,"pos":0,"size":6}]},{"t":960,"pos":12,"size":6},{"t":961,"pos":12,"size":6}]}"#;
+    let result = renderer
+        .render(
+            chart,
+            RenderOptions {
+                supersample: 1,
+                ..RenderOptions::default()
+            },
+            Metadata {
+                title: "Dense connections".into(),
+                ..Metadata::default()
+            },
+            false,
+            "dense.png",
+            None,
+        )
+        .unwrap();
+    assert_eq!(result.report.structural_connection_overlaps, 1);
+    assert_eq!(result.report.dense_body_overlaps, 2);
+    assert!(
+        result
+            .report
+            .warnings
+            .iter()
+            .any(|s| s.contains("Some body boxes still overlap"))
+    );
+    assert!(
+        result
+            .report
+            .warnings
+            .iter()
+            .any(|s| s.contains("structural connection pairs"))
+    );
+}
+#[test]
 fn memory_render_is_self_contained_repeatable_and_counts_combos() {
     let renderer = Renderer::builtin().unwrap();
     let options = RenderOptions {

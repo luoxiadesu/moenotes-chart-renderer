@@ -10,6 +10,8 @@ The built-in skin and synthetic fixtures contain no game images or charts.
 - `skia-safe` bindings: MIT; Skia: BSD-3-Clause plus bundled component notices.
   Cargo.lock pins wrapper/dependency versions. See the upstream Skia LICENSE and
   third_party notices distributed with its binary/source package.
+- WASM uses the Emscripten runtime under its MIT/University of Illinois notices;
+  the SDK package includes the toolchain LICENSE.
 - Rust dependencies retain their upstream licenses as recorded in Cargo metadata.
 
 Embedded fonts are unmodified files, not relicensed by this project's MIT license:
