@@ -48,6 +48,16 @@ Native and WASM rendering verify downscaled complete sheets and reject the same
 input at an excessive export scale. Build-tool tests cover custom Cargo artifact
 paths and refusal to substitute stale or missing output.
 
+## Responsive sheet presentation
+
+White/black sheets have reviewed Linux baselines for the larger song/brand header,
+symbol legend, per-track headings and separate notes/footer. Checks include long
+CJK titles/credits, narrow and bare-metadata sheets, measure changes and the
+`chart_offset_y` contract in native and WASM calls. Brand clearance is retained
+when cover and artist are absent; note positions relative to time remain unchanged.
+The legacy dark complete-sheet baseline is preserved. No new Windows/macOS
+white/black pixel baselines are claimed.
+
 ## Deliberate boundaries
 
 - The print theme has reviewed Linux complete and narrow visual baselines. Its

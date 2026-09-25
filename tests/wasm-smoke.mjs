@@ -31,6 +31,10 @@ const dense = new TextEncoder().encode(JSON.stringify({events:{},notes:[
 const denseResult = renderer.render({chart:dense,metadata:{title:'Dense'},options:{supersample:1}});
 assert.equal(denseResult.report.arrow_body_box_overlaps,0);
 assert.equal(denseResult.report.flick_callouts.length,2);
+const creditedDense = renderer.render({chart:dense,metadata:{title:'Dense',author:'作詞作曲編曲 '.repeat(30)},options:{supersample:1}});
+const headerShift = creditedDense.report.chart_offset_y - denseResult.report.chart_offset_y;
+assert(headerShift > 0);
+assert(Math.abs(creditedDense.report.flick_callouts[0].y - denseResult.report.flick_callouts[0].y - headerShift) < 0.01);
 const largeChart = new TextEncoder().encode(JSON.stringify({events:{},notes:[{t:690720,pos:4,size:6}]}));
 const largeOptions = {pixels_per_beat:160,auto_spacing:false,supersample:1,output_scale:0.25};
 const largeResult = renderer.render({chart:largeChart,metadata:{title:'Downscaled large sheet'},options:largeOptions});
@@ -50,4 +54,4 @@ assert.deepEqual(resource.bytes, chart);
 await assert.rejects(fetchResource(chartObjectKey('test/test_03'), { sha256: '0'.repeat(64), fetch: async () => new Response(chart) }), /SHA-256/);
 renderer.dispose();
 assert.throws(() => renderer.render({ chart, metadata: { title: 'Disposed' } }), /disposed/);
-console.log(JSON.stringify({ wasm: 'passed', themes: results, gzip: true, malformedImages: true, denseFlick: true, errorRecovery: true, exportScale: true, viewport: true, resources: true }));
+console.log(JSON.stringify({ wasm: 'passed', themes: results, gzip: true, malformedImages: true, denseFlick: true, headerCoordinates: true, errorRecovery: true, exportScale: true, viewport: true, resources: true }));

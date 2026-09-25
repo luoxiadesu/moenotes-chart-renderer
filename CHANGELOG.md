@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased — sheet presentation
+
+- Enlarge title, cover, difficulty and total Combo on white/black sheets; use
+  a responsive moenotes/bdon.moe masthead and a separate branded footer.
+- Wrap titles/credits, use actual note shapes in the seven-item legend, position
+  column headings above each track and emphasize major measure labels.
+- Present overflow events as chart notes with bar/quarter-note-beat positions;
+  wrap long entries and expose the chart's vertical presentation offset.
+- Reserve brand clearance even without cover/artist metadata, and honor critical
+  mark/strict-asset options when drawing the legend.
+- Preserve tick/lane geometry, column cuts, full-image export and legacy dark
+  rendering. Review new Linux complete and narrow visual baselines.
+
 ## 0.3.0 — source preview
 
 - WASM32 Emscripten SDK with typed byte input/PNG output, CJK fonts, resource

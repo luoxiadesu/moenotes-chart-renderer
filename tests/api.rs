@@ -28,7 +28,11 @@ fn large_logical_sheet_can_be_exported_below_pixel_budget() {
     assert_eq!(result.pages.len(), 1);
     let image = &result.report.images[0];
     assert!(image.logical_width as i64 * image.logical_height as i64 > 64_000_000);
-    assert_eq!((image.width, image.height), (10206, 2071));
+    assert_eq!(image.width, 10206);
+    assert_eq!(
+        image.height,
+        (image.logical_height as f64 * 0.5).ceil() as i32
+    );
     assert_eq!(result.report.glyphs, 1);
     let error = renderer
         .render(
@@ -155,6 +159,40 @@ fn white_native_critical_flag_is_applied() {
         pngs.push(r.pages[0].png.clone());
     }
     assert_ne!(pngs[0], pngs[1]);
+}
+
+#[test]
+fn long_credits_expand_header_without_moving_relative_note_positions() {
+    let renderer = Renderer::builtin().unwrap();
+    let chart=br#"{"events":{},"notes":[{"type":"flick","t":480,"pos":4,"size":8},{"type":"tap","t":510,"pos":4,"size":8}]}"#;
+    let mut reports = vec![];
+    for author in [String::new(), "作詞・作曲・編曲 藤井健太郎 ".repeat(10)] {
+        reports.push(
+            renderer
+                .render(
+                    chart,
+                    RenderOptions {
+                        supersample: 1,
+                        ..RenderOptions::default()
+                    },
+                    Metadata {
+                        title: "A long title テスト テスト テスト テスト".into(),
+                        author,
+                        ..Metadata::default()
+                    },
+                    false,
+                    "header.png",
+                    None,
+                )
+                .unwrap()
+                .report,
+        );
+    }
+    assert_eq!(reports[0].glyphs, reports[1].glyphs);
+    assert_eq!(reports[0].columns, reports[1].columns);
+    let delta = reports[1].chart_offset_y - reports[0].chart_offset_y;
+    assert!(delta > 0.);
+    assert!((reports[1].flick_callouts[0].y - reports[0].flick_callouts[0].y - delta).abs() < 0.01);
 }
 #[test]
 fn print_and_dark_keep_the_same_chart_counts() {

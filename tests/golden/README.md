@@ -2,16 +2,18 @@
 
 ## Print theme
 
-`synthetic-print.png` is the default print theme (1032 x 547); the complete
-single-column `synthetic-print-narrow.png` (360 x 883) exercises minimum lane width,
+`synthetic-print.png` is the default print theme (1032 x 670); the complete
+single-column `synthetic-print-narrow.png` (360 x 1145) exercises minimum lane width,
 cover, CJK title, FC, wrapped legend and stacked timestamps. Both were rendered
 and visually reviewed on Linux x86_64 / FreeType with Rust 1.98.1 and Skia 0.153.3
-on 2026-09-25, from the local print-theme changes based on `5d6a450`.
+on 2026-09-25, from the local responsive-header changes based on `a806ace`.
+Review included whole real sheets at reduced display widths, long titles/credits,
+compact layout and the exact complete synthetic baselines.
 
 | File | SHA-256 |
 | --- | --- |
-| synthetic-print.png | b07aaf2944bc5dc5e384cd4aacbe3e9fa56464af3ed03411dd5e784c6d56582b |
-| synthetic-print-narrow.png | c220fe840405a6ebf831609d73d35412d9803da824c25c9879df1386cfef115e |
+| synthetic-print.png | 87686cfde66f265619e2b96a802edfbe5f250ae895d179dc8bd65885a28067de |
+| synthetic-print-narrow.png | 5925500c11f71f1dec7f564e34635c096f79578a9c45970b1984d356e462e3f7 |
 
 Use `--theme print` and optionally `--narrow` with `check_golden.py` to check them.
 These remain complete images; the narrow case is not a crop or page. Linux CI
@@ -23,8 +25,9 @@ Do not copy Linux print pixels into a purported native baseline.
 
 `synthetic-black.png` is the new neutral deep-black preset, reviewed on Linux
 with Rust 1.98.1 / Skia 0.153.3 on 2026-09-25. SHA-256:
-`ff8e7874cd80292325cbd9fc36e0cff1f7d2444115d29e41ffce4962d2c3eaf9`.
-It is the same complete 1032 x 547 synthetic sheet. Check it with `--theme black`.
+`e3eb63a1ddb2c1d4b6e432cb9ee62dafa01410b088d8b0552c9d7071a7dae5ca`.
+It is the same complete 1032 x 670 synthetic sheet, from local changes based on
+`a806ace`. Check it with `--theme black`.
 Native Windows/macOS black pixel baselines have not yet been reviewed.
 
 ## Legacy dark theme

@@ -11,6 +11,13 @@ not the final art direction or a pixel-identical reproduction of the game.
 
 ![Synthetic print chart preview](tests/golden/synthetic-print.png)
 
+White and black sheets use a responsive song header: enlarged cover/title,
+difficulty badge, BPM and total Combo, author credits, and a prominent
+`moenotes` / `bdon.moe` signature. Narrow sheets stack the information; titles
+and credits wrap to two lines before ellipsis. The header shows total Combo
+rather than conflating it with visible note shapes. Original counts remain in
+the render report. Overflow events appear in a separate chart-notes section.
+
 ## Quick start
 
 ```sh

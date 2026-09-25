@@ -7,6 +7,16 @@ edges. These cues remain visible when converted to grayscale. External packs
 retain their original sprites with a body outline; use the built-in artwork
 for the most consistent contrast on paper.
 
+White and deep black now share a responsive information hierarchy. Large sheets
+use a 75 px title, a 190 px cover, a difficulty badge and grouped BPM/total Combo;
+the moenotes wordmark and bdon.moe site occupy their own masthead area. Small sheets
+use compact sizes and stacked rows. Titles and credits wrap to two lines, with
+ellipsis for any remaining text; the full strings remain in the report.
+The seven-item legend uses note/guide/fever shapes. Column headings sit above
+their own tracks, and major measure labels have greater weight. The chart-notes
+section uses bar and quarter-note-beat coordinates rather than raw tick numbers.
+The independent footer repeats moenotes and bdon.moe at readable sizes.
+
 ```sh
 moenotes-chart-renderer render chart.json -o print.png
 moenotes-chart-renderer render chart.json -o screen.png --theme black

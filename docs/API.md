@@ -28,6 +28,11 @@ JSON uses `white` (accepts `print`), `black`, and `dark`.
 logical layout. Image reports include `logical_width` and `logical_height`.
 Pixel and dimension budgets apply after scaling and include rails/appendices;
 logical dimensions alone do not reject a safely downscaled export.
+White/black presentation reserves responsive header and footer space, so image
+height can vary with title/credit wrapping. Score geometry and column cuts do not
+change. `Report.chart_offset_y` is the logical-pixel vertical offset from Scene
+coordinates to the final sheet. Reported `flick_callouts[].y` already includes it;
+apply `output_scale` only when converting those coordinates to exported pixels.
 `flick_layout` defaults to `FlickLayout::Callout`; `Inline` restores original placement.
 Built-in colliding arrows use side rails and leader lines; source ticks and bodies
 remain unchanged. Reports preserve `inline_arrow_body_box_overlaps`, remaining

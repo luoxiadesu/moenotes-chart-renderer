@@ -84,6 +84,10 @@ native metadata adapter is not part of the WASM module.
 They touch no DOM and attach no event listeners. Their coordinates must use the
 same image coordinate space selected by the host (logical or output pixels).
 Display zoom changes that transform; it does not change exported bytes.
+White/black exports reserve responsive header and footer space. Their image height
+can change when the title or author credits wrap. `report.chart_offset_y` describes
+the logical vertical shift from Scene coordinates; `flick_callouts[].y` already
+includes this shift. The note timeline and column cuts remain unchanged.
 
 For a higher-resolution export, render again with `options.output_scale: 2`.
 That changes PNG pixels without reflowing columns, moving notes or altering ticks.

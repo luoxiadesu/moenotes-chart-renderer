@@ -14,6 +14,8 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     path::Path,
 };
+mod sheet;
+
 const BG: Color = Color::from_rgb(13, 20, 29);
 const PANEL: Color = Color::from_rgb(20, 29, 40);
 const FG: Color = Color::from_rgb(228, 237, 246);
@@ -145,6 +147,8 @@ pub struct Report {
     pub flick_callouts: Vec<FlickCallout>,
     pub unresolved_flick_note_ids: Vec<i32>,
     pub flick_rail_width: f64,
+    /// Vertical presentation offset added to logical Scene coordinates.
+    pub chart_offset_y: f64,
     pub mark_body_box_overlaps: usize,
     pub annotation_overflow: usize,
     pub statistics: crate::parser::Statistics,
@@ -591,7 +595,11 @@ fn display_events(scene: &Scene, ci: usize) -> (Vec<crate::scene::Annotation>, V
                 kind: "bpm".into(),
             });
             for a in &bpm[i..end] {
-                details.push(format!("@{}  {}", a.tick, a.label));
+                details.push(if scene.layout.options.theme == Theme::Dark {
+                    format!("@{}  {}", a.tick, a.label)
+                } else {
+                    format!("{}   {}", sheet::location(scene, a.tick), a.label)
+                });
             }
         } else {
             shown.extend_from_slice(&bpm[i..end]);
@@ -600,7 +608,11 @@ fn display_events(scene: &Scene, ci: usize) -> (Vec<crate::scene::Annotation>, V
     }
     for event in &mut shown {
         if event.kind == "call" && event.label.len() > 12 {
-            details.push(format!("@{}  {}", event.tick, event.label));
+            details.push(if scene.layout.options.theme == Theme::Dark {
+                format!("@{}  {}", event.tick, event.label)
+            } else {
+                format!("{}   {}", sheet::location(scene, event.tick), event.label)
+            });
             event.label = "CALL ↳".into();
         }
     }
@@ -818,6 +830,7 @@ pub fn render_memory(
         .iter()
         .filter(|g| g.note.right <= 0. || g.note.left >= 24.)
         .count();
+    let mut header_shift = 0.;
     for (page, range) in pages.iter().enumerate() {
         let base_width = scene.layout.page_width(range.len())?;
         let width = (base_width as f64 + rail_width * range.len() as f64).ceil();
@@ -826,6 +839,13 @@ pub fn render_memory(
             "Flick rails exceed logical coordinate range"
         );
         let width = width as i32;
+        let modern = theme != Theme::Dark;
+        let header = sheet::Header::plan(width, fonts, metadata, cover.is_some());
+        header_shift = if modern {
+            header.height - layout::HEADER
+        } else {
+            0.
+        };
         let mut overflows: Vec<String> = vec![];
         // Reserve a legible appendix if an exceptionally dense column has more event
         // labels than can be placed beside it (common in tempo-ramp test charts).
@@ -836,25 +856,49 @@ pub fn render_memory(
             let (events, details) = display_events(scene, ci);
             overflows.extend(details);
             let cap = ((bottom - top + 30.) / 12.).floor() as usize;
-            overflows.extend(
-                events
-                    .into_iter()
-                    .skip(cap)
-                    .map(|a| format!("@{}  {}", a.tick, a.label)),
-            );
+            overflows.extend(events.into_iter().skip(cap).map(|a| {
+                if modern {
+                    format!("{}   {}", sheet::location(scene, a.tick), a.label)
+                } else {
+                    format!("@{}  {}", a.tick, a.label)
+                }
+            }));
         }
-        let appendix_columns = ((width as usize).saturating_sub(40) / 220).clamp(1, 3);
+        let appendix_columns = if modern {
+            ((width as usize).saturating_sub(48) / 520).clamp(1, 4)
+        } else {
+            ((width as usize).saturating_sub(40) / 220).clamp(1, 3)
+        };
+        let overflow_count_before_wrap = overflows.len();
+        if modern {
+            let max = (width as f32 - 48. * header.scale as f32) / appendix_columns as f32 - 16.;
+            overflows = overflows
+                .iter()
+                .flat_map(|line| fonts.lines(line, 12. * header.scale as f32, false, max, 256))
+                .collect();
+        }
         let appendix_rows = overflows.len().div_ceil(appendix_columns);
-        let appendix_height = i32::try_from(appendix_rows)?
-            .checked_mul(17)
-            .and_then(|h| h.checked_add(if overflows.is_empty() { 0 } else { 36 }))
-            .context("Annotation appendix height overflow")?;
-        let height = scene
-            .layout
-            .height
-            .checked_add(appendix_height)
-            .context("Logical image height overflow")?;
-        overflow_count += overflows.len();
+        let appendix_step = if modern { 22. * header.scale } else { 17. };
+        let appendix_height = (appendix_rows as f64 * appendix_step
+            + if overflows.is_empty() {
+                0.
+            } else if modern {
+                58. * header.scale
+            } else {
+                36.
+            })
+        .ceil();
+        let footer_height = if modern {
+            84. * header.scale
+        } else {
+            layout::FOOTER
+        };
+        let height = scene.layout.height as f64 + header_shift - layout::FOOTER
+            + footer_height
+            + appendix_height;
+        ensure!(height <= i32::MAX as f64, "Logical image height overflow");
+        let height = height.ceil() as i32;
+        overflow_count += overflow_count_before_wrap;
         let ss = scene.layout.options.supersample as i32;
         let scale = scene.layout.options.output_scale;
         let (export_width, export_height) = scene
@@ -866,170 +910,186 @@ pub fn render_memory(
         let c = surface.canvas();
         c.scale(((ss as f64 * scale) as f32, (ss as f64 * scale) as f32));
         c.clear(palette.background);
-        let compact = width < 600;
-        let cover_size = if compact { 52. } else { 80. };
-        let text_x = if cover.is_some() {
-            cover_size + 34.
+        if modern {
+            header.draw(
+                c,
+                fonts,
+                skin,
+                &palette,
+                scene,
+                metadata,
+                cover.as_ref(),
+                width,
+                mirror,
+            )?;
         } else {
-            20.
-        };
-        let content_width = width as f32 - text_x as f32 - 20.;
-        if let Some(image) = &cover {
-            c.save();
-            c.clip_rect(
-                Rect::from_xywh(20., 20., cover_size as f32, cover_size as f32),
-                None,
-                true,
-            );
-            let side = image.width().min(image.height()) as f32;
-            let src = Rect::from_xywh(
-                (image.width() as f32 - side) / 2.,
-                (image.height() as f32 - side) / 2.,
-                side,
-                side,
-            );
-            c.draw_image_rect_with_sampling_options(
-                image,
-                Some((&src, sk::canvas::SrcRectConstraint::Strict)),
-                Rect::from_xywh(20., 20., cover_size as f32, cover_size as f32),
-                sk::FilterMode::Linear,
-                &Paint::default(),
-            );
-            c.restore();
-        }
-        fonts.draw(
-            c,
-            &metadata.title,
-            text_x,
-            42.,
-            if compact { 16. } else { 25. },
-            palette.text,
-            true,
-            content_width,
-        );
-        let difficulty = if metadata.difficulty.is_empty() {
-            "CHART"
-        } else {
-            &metadata.difficulty
-        };
-        let subtitle = format!(
-            "{difficulty} {}   /   {}   /   {} notes{}",
-            metadata.level,
-            metric_bpm(scene),
-            scene.glyphs.len(),
-            if mirror { "   /   MIRROR" } else { "" }
-        );
-        fonts.draw(
-            c,
-            &subtitle,
-            if compact { 20. } else { text_x },
-            if compact { 89. } else { 65. },
-            if compact { 9.5 } else { 11.5 },
-            palette.muted,
-            false,
-            if compact {
-                width as f32 - 40.
+            let compact = width < 600;
+            let cover_size = if compact { 52. } else { 80. };
+            let text_x = if cover.is_some() {
+                cover_size + 34.
             } else {
-                content_width
-            },
-        );
-        let fc = metadata
-            .master_full_combo
-            .map(|v| format!("FC {v} (master)"))
-            .unwrap_or_else(|| {
-                format!(
-                    "FC {} (reconstructed)",
-                    scene.statistics.reconstructed_full_combo
-                )
-            });
-        fonts.draw(
-            c,
-            &fc,
-            (width as f64 - 205.).max(20.),
-            101.,
-            10.,
-            palette.muted,
-            false,
-            (width as f32 - 40.).min(185.),
-        );
-        if !metadata.artist.is_empty() {
+                20.
+            };
+            let content_width = width as f32 - text_x as f32 - 20.;
+            if let Some(image) = &cover {
+                c.save();
+                c.clip_rect(
+                    Rect::from_xywh(20., 20., cover_size as f32, cover_size as f32),
+                    None,
+                    true,
+                );
+                let side = image.width().min(image.height()) as f32;
+                let src = Rect::from_xywh(
+                    (image.width() as f32 - side) / 2.,
+                    (image.height() as f32 - side) / 2.,
+                    side,
+                    side,
+                );
+                c.draw_image_rect_with_sampling_options(
+                    image,
+                    Some((&src, sk::canvas::SrcRectConstraint::Strict)),
+                    Rect::from_xywh(20., 20., cover_size as f32, cover_size as f32),
+                    sk::FilterMode::Linear,
+                    &Paint::default(),
+                );
+                c.restore();
+            }
             fonts.draw(
                 c,
-                &metadata.artist,
+                &metadata.title,
                 text_x,
-                if compact { 64. } else { 84. },
-                10.5,
-                palette.muted,
-                false,
+                42.,
+                if compact { 16. } else { 25. },
+                palette.text,
+                true,
                 content_width,
             );
-        }
-        if !metadata.author.is_empty() {
-            fonts.draw(
-                c,
-                &metadata.author,
-                20.,
-                118.,
-                10.,
-                palette.muted,
-                false,
-                width as f32 - 40.,
-            );
-        }
-        // Compact visual legend instead of debug implementation text.
-        let mut ly = if print { 131. } else { 141. };
-        let labels = [
-            ("TAP", Color::from_rgb(117, 199, 226)),
-            ("SLIDE", Color::from_rgb(124, 148, 243)),
-            ("FLICK", Color::from_rgb(238, 189, 94)),
-            ("TRACE", Color::from_rgb(181, 156, 230)),
-            ("CRITICAL", GOLD),
-            ("FEVER", Color::from_rgb(191, 163, 95)),
-        ];
-        let mut lx = 20.;
-        for (label, color) in labels {
-            let color = if print {
-                match label {
-                    "TAP" => print_note_color("tap"),
-                    "SLIDE" => print_note_color("slide"),
-                    "FLICK" => print_note_color("flick"),
-                    "TRACE" => print_note_color("trace"),
-                    _ => Color::from_rgb(129, 78, 9),
-                }
+            let difficulty = if metadata.difficulty.is_empty() {
+                "CHART"
             } else {
-                color
+                &metadata.difficulty
             };
-            if lx + 80. > width as f64 {
-                if print {
-                    lx = 20.;
-                    ly += 14.;
-                } else {
-                    break;
-                }
-            }
-            c.draw_circle((lx as f32 + 3., ly as f32 - 3.), 2.4, &paint(color));
-            fonts.draw(c, label, lx + 11., ly, 9., palette.muted, false, 80.);
-            lx += if label == "CRITICAL" { 83. } else { 66. };
-        }
-        stroke(
-            c,
-            (20., layout::HEADER - 31.),
-            (width as f64 - 20., layout::HEADER - 31.),
-            palette.rule,
-            0.8,
-        );
-        if !print {
+            let subtitle = format!(
+                "{difficulty} {}   /   {}   /   {} notes{}",
+                metadata.level,
+                metric_bpm(scene),
+                scene.glyphs.len(),
+                if mirror { "   /   MIRROR" } else { "" }
+            );
             fonts.draw(
                 c,
-                &format!("{:02} / {:02}", page + 1, pages.len()),
-                width as f64 - 83.,
-                layout::HEADER - 42.,
+                &subtitle,
+                if compact { 20. } else { text_x },
+                if compact { 89. } else { 65. },
+                if compact { 9.5 } else { 11.5 },
+                palette.muted,
+                false,
+                if compact {
+                    width as f32 - 40.
+                } else {
+                    content_width
+                },
+            );
+            let fc = metadata
+                .master_full_combo
+                .map(|v| format!("FC {v} (master)"))
+                .unwrap_or_else(|| {
+                    format!(
+                        "FC {} (reconstructed)",
+                        scene.statistics.reconstructed_full_combo
+                    )
+                });
+            fonts.draw(
+                c,
+                &fc,
+                (width as f64 - 205.).max(20.),
+                101.,
                 10.,
                 palette.muted,
                 false,
-                64.,
+                (width as f32 - 40.).min(185.),
             );
+            if !metadata.artist.is_empty() {
+                fonts.draw(
+                    c,
+                    &metadata.artist,
+                    text_x,
+                    if compact { 64. } else { 84. },
+                    10.5,
+                    palette.muted,
+                    false,
+                    content_width,
+                );
+            }
+            if !metadata.author.is_empty() {
+                fonts.draw(
+                    c,
+                    &metadata.author,
+                    20.,
+                    118.,
+                    10.,
+                    palette.muted,
+                    false,
+                    width as f32 - 40.,
+                );
+            }
+            // Compact visual legend instead of debug implementation text.
+            let mut ly = if print { 131. } else { 141. };
+            let labels = [
+                ("TAP", Color::from_rgb(117, 199, 226)),
+                ("SLIDE", Color::from_rgb(124, 148, 243)),
+                ("FLICK", Color::from_rgb(238, 189, 94)),
+                ("TRACE", Color::from_rgb(181, 156, 230)),
+                ("CRITICAL", GOLD),
+                ("FEVER", Color::from_rgb(191, 163, 95)),
+            ];
+            let mut lx = 20.;
+            for (label, color) in labels {
+                let color = if print {
+                    match label {
+                        "TAP" => print_note_color("tap"),
+                        "SLIDE" => print_note_color("slide"),
+                        "FLICK" => print_note_color("flick"),
+                        "TRACE" => print_note_color("trace"),
+                        _ => Color::from_rgb(129, 78, 9),
+                    }
+                } else {
+                    color
+                };
+                if lx + 80. > width as f64 {
+                    if print {
+                        lx = 20.;
+                        ly += 14.;
+                    } else {
+                        break;
+                    }
+                }
+                c.draw_circle((lx as f32 + 3., ly as f32 - 3.), 2.4, &paint(color));
+                fonts.draw(c, label, lx + 11., ly, 9., palette.muted, false, 80.);
+                lx += if label == "CRITICAL" { 83. } else { 66. };
+            }
+            stroke(
+                c,
+                (20., layout::HEADER - 31.),
+                (width as f64 - 20., layout::HEADER - 31.),
+                palette.rule,
+                0.8,
+            );
+            if !print {
+                fonts.draw(
+                    c,
+                    &format!("{:02} / {:02}", page + 1, pages.len()),
+                    width as f64 - 83.,
+                    layout::HEADER - 42.,
+                    10.,
+                    palette.muted,
+                    false,
+                    64.,
+                );
+            }
         }
+        c.save();
+        c.translate((0., header_shift as f32));
         for (local, ci) in range.clone().enumerate() {
             let col = &scene.layout.columns[ci];
             let used_width =
@@ -1048,8 +1108,12 @@ pub fn render_memory(
                 c,
                 &format!("{:03}—{:03}", col.first_bar, col.last_bar),
                 x,
-                layout::HEADER - 5.,
-                11.,
+                if modern {
+                    top - layout::PAD - 10.
+                } else {
+                    layout::HEADER - 5.
+                },
+                if modern { 14. } else { 11. },
                 palette.text,
                 true,
                 (scene.layout.column_width - layout::LEFT - layout::GAP) as f32,
@@ -1118,15 +1182,28 @@ pub fn render_memory(
                 .filter(|b| col.start <= b.tick && b.tick <= col.end)
             {
                 let y = scene.layout.y(col, bar.tick as f64);
-                stroke(c, (x, y), (x + track, y), palette.bar, 0.9);
+                let major = modern && (bar.number == col.first_bar || bar.number % 4 == 1);
+                stroke(
+                    c,
+                    (x, y),
+                    (x + track, y),
+                    palette.bar,
+                    if major {
+                        1.15
+                    } else if modern {
+                        0.8
+                    } else {
+                        0.9
+                    },
+                );
                 fonts.draw(
                     c,
                     &format!("{:03}", bar.number),
                     x - 26.,
                     y + 3.,
-                    9.5,
+                    if modern { 10.5 } else { 9.5 },
                     palette.muted,
-                    false,
+                    major,
                     25.,
                 );
             }
@@ -1291,7 +1368,7 @@ pub fn render_memory(
             if overflow > 0 || !details.is_empty() {
                 fonts.draw(
                     c,
-                    "↳ appendix",
+                    if modern { "↳ NOTES" } else { "↳ appendix" },
                     event_x + 4.,
                     bottom + 31.,
                     8.,
@@ -1335,38 +1412,66 @@ pub fn render_memory(
                 (track as f32).min(70.),
             );
         }
+        c.restore();
+        let notes_top = scene.layout.height as f64 + header_shift - layout::FOOTER + 24.;
+        if modern && !overflows.is_empty() {
+            fonts.draw(
+                c,
+                "CHART NOTES",
+                24. * header.scale,
+                notes_top + 17. * header.scale,
+                13. * header.scale as f32,
+                palette.text,
+                true,
+                width as f32 - 48.,
+            );
+        }
         for (i, label) in overflows.iter().enumerate() {
-            let x = 20.
-                + (i % appendix_columns) as f64 * (width as f64 - 40.) / appendix_columns as f64;
-            let y = scene.layout.height as f64 + 15. + (i / appendix_columns) as f64 * 17.;
+            let x = if modern { 24. * header.scale } else { 20. }
+                + (i % appendix_columns) as f64
+                    * (width as f64 - if modern { 48. * header.scale } else { 40. })
+                    / appendix_columns as f64;
+            let y = if modern {
+                notes_top + 46. * header.scale + (i / appendix_columns) as f64 * appendix_step
+            } else {
+                scene.layout.height as f64 + 15. + (i / appendix_columns) as f64 * 17.
+            };
             fonts.draw(
                 c,
                 label,
                 x,
                 y,
-                10.,
+                if modern {
+                    12. * header.scale as f32
+                } else {
+                    10.
+                },
                 palette.muted,
                 false,
-                (width as f32 - 40.) / appendix_columns as f32 - 12.,
+                if modern {
+                    (width as f32 - 48. * header.scale as f32) / appendix_columns as f32 - 16.
+                } else {
+                    (width as f32 - 40.) / appendix_columns as f32 - 12.
+                },
             );
         }
-        fonts.draw(
-            c,
-            &if print {
-                "moenotes bdon.moe  ·  TIME ↑  COLUMNS →".to_owned()
-            } else {
-                format!(
+        if modern {
+            sheet::footer(c, fonts, &palette, width, height, header.scale);
+        } else {
+            fonts.draw(
+                c,
+                &format!(
                     "moenotes bdon.moe  ·  {}  ·  upward / left to right",
                     skin.manifest.skin
-                )
-            },
-            20.,
-            height as f64 - 15.,
-            9.,
-            palette.muted,
-            false,
-            width as f32 - 40.,
-        );
+                ),
+                20.,
+                height as f64 - 15.,
+                9.,
+                palette.muted,
+                false,
+                width as f32 - 40.,
+            );
+        }
         let path = if pages.len() == 1 {
             output.to_path_buf()
         } else {
@@ -1489,9 +1594,16 @@ pub fn render_memory(
             structural_connection_overlaps: structural_overlaps,
             arrow_body_box_overlaps: arrow_overlaps,
             inline_arrow_body_box_overlaps: inline_arrow_overlaps,
-            flick_callouts: callouts,
+            flick_callouts: callouts
+                .into_iter()
+                .map(|mut item| {
+                    item.y += header_shift;
+                    item
+                })
+                .collect(),
             unresolved_flick_note_ids: unresolved_callouts,
             flick_rail_width: rail_width,
+            chart_offset_y: header_shift,
             mark_body_box_overlaps: mark_overlaps,
             annotation_overflow: overflow_count,
             statistics: scene.statistics.clone(),
