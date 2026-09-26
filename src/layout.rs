@@ -9,6 +9,16 @@ pub const RIGHT: f64 = 60.;
 pub const GAP: f64 = 12.;
 pub const PAD: f64 = 26.;
 pub const MIN_SHEET_WIDTH: f64 = 360.;
+/// Chart typography scale for white/black sheets: follows the header's width
+/// scale (1..2.5) but stays in 1..1.8 so gutters do not dominate tracks.
+/// Legacy dark sheets keep 1.
+pub fn chart_text_scale(theme: Theme, sheet_width: f64) -> f64 {
+    if theme == Theme::Dark {
+        1.
+    } else {
+        (sheet_width / 1500.).clamp(1., 1.8)
+    }
+}
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Theme {
@@ -131,6 +141,17 @@ pub struct Layout {
     pub height: i32,
     pub track_height: f64,
     pub unused_vertical_fraction: f64,
+    /// Multiplier for chart text and its gutters; see [`chart_text_scale`].
+    pub text_scale: f64,
+    /// Bar-number gutter left of each track.
+    pub left: f64,
+    /// Event-label gutter right of each track (Flick rails are separate).
+    pub right: f64,
+    pub pad_top: f64,
+    pub pad_bottom: f64,
+    /// White/black align every column's last measure to one top line; legacy
+    /// dark aligns column starts at the bottom. Time runs upward in both.
+    pub top_aligned: bool,
 }
 impl Layout {
     pub fn build(score: &Score, mut options: Options) -> Result<Self> {
@@ -261,8 +282,16 @@ impl Layout {
             .iter()
             .map(|c| (c.end - c.start) as f64 / 480. * options.pixels_per_beat)
             .fold(0., f64::max);
-        let column_width = LEFT + 24. * options.pixels_per_lane + RIGHT + GAP;
-        let height = (HEADER + PAD * 2. + track_height + FOOTER).ceil();
+        let track = 24. * options.pixels_per_lane;
+        let top_aligned = options.theme != Theme::Dark;
+        // The scale follows the sheet width at unit gutters, so widening the
+        // gutters cannot feed back into the scale.
+        let base_width =
+            (columns.len() as f64 * (LEFT + track + RIGHT + GAP) + GAP).max(MIN_SHEET_WIDTH);
+        let text_scale = chart_text_scale(options.theme, base_width);
+        let (left, right, pad) = (LEFT * text_scale, RIGHT * text_scale, PAD * text_scale);
+        let column_width = left + track + right + GAP;
+        let height = (HEADER + pad * 2. + track_height + FOOTER).ceil();
         ensure!(
             height <= i32::MAX as f64,
             "Logical image height exceeds coordinate range"
@@ -278,6 +307,12 @@ impl Layout {
             height: height as i32,
             track_height,
             unused_vertical_fraction: unused,
+            text_scale,
+            left,
+            right,
+            pad_top: pad,
+            pad_bottom: pad,
+            top_aligned,
         };
         for range in l.pages() {
             l.page_width(range.len())?;
@@ -290,8 +325,12 @@ impl Layout {
             .position(|c| c.start <= tick && tick < c.end)
     }
     pub fn y(&self, c: &Column, tick: f64) -> f64 {
-        HEADER + PAD + self.track_height
-            - (tick - c.start as f64) / 480. * self.options.pixels_per_beat
+        if self.top_aligned {
+            HEADER + self.pad_top + (c.end as f64 - tick) / 480. * self.options.pixels_per_beat
+        } else {
+            HEADER + self.pad_top + self.track_height
+                - (tick - c.start as f64) / 480. * self.options.pixels_per_beat
+        }
     }
     pub fn pages(&self) -> Vec<std::ops::Range<usize>> {
         std::iter::once(0..self.columns.len()).collect()
@@ -472,6 +511,54 @@ mod tests {
         assert!(l.unused_vertical_fraction < 0.16);
         assert_eq!(l.pages().len(), 1);
         assert_eq!(l.pages()[0].len(), l.columns.len());
+        Ok(())
+    }
+    #[test]
+    fn modern_columns_share_a_top_line_and_keep_tick_scale() -> Result<()> {
+        // Uneven explicit columns: 3 bars then 1 bar.
+        let s = Score::parse(br#"{"events":{},"notes":[{"t":7000}]}"#, false)?;
+        for theme in [Theme::Print, Theme::Black, Theme::Dark] {
+            let l = Layout::build(
+                &s,
+                Options {
+                    theme,
+                    bars_per_column: 3,
+                    ..Options::default()
+                },
+            )?;
+            let (a, b) = (&l.columns[0], &l.columns[1]);
+            assert_ne!(a.end - a.start, b.end - b.start);
+            let unit = l.options.pixels_per_beat / 480.;
+            for c in [a, b] {
+                // Time still runs upward at the same scale in every column.
+                let d = l.y(c, c.start as f64) - l.y(c, c.end as f64);
+                assert!((d - (c.end - c.start) as f64 * unit).abs() < 1e-9);
+            }
+            if theme == Theme::Dark {
+                assert_eq!(l.y(a, a.start as f64), l.y(b, b.start as f64));
+                assert_eq!(l.text_scale, 1.);
+            } else {
+                assert!(l.top_aligned);
+                assert_eq!(l.y(a, a.end as f64), l.y(b, b.end as f64));
+            }
+        }
+        Ok(())
+    }
+    #[test]
+    fn chart_text_scale_follows_sheet_width_within_bounds() -> Result<()> {
+        assert_eq!(chart_text_scale(Theme::Print, 900.), 1.);
+        assert!((chart_text_scale(Theme::Print, 2250.) - 1.5).abs() < 1e-12);
+        assert_eq!(chart_text_scale(Theme::Black, 9000.), 1.8);
+        assert_eq!(chart_text_scale(Theme::Dark, 9000.), 1.);
+        let s = Score::parse(br#"{"events":{},"notes":[{"t":80000}]}"#, false)?;
+        let wide = Layout::build(&s, Options::default())?;
+        assert!(wide.text_scale > 1.);
+        let track = 24. * wide.options.pixels_per_lane;
+        assert!(
+            (wide.column_width - (LEFT * wide.text_scale + track + RIGHT * wide.text_scale + GAP))
+                .abs()
+                < 1e-9
+        );
         Ok(())
     }
 }

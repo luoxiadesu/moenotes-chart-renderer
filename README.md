@@ -1,7 +1,7 @@
 # MoeNotes Chart Renderer
 
 Render a rhythm chart as **one complete multi-column PNG** with cover art, song
-title, author credits, difficulty, CJK text and the `moenotes bdon.moe` footer.
+title, author credits, difficulty, CJK text and `moenotes` / `bdon.moe` branding.
 The renderer uses Rust, the vendored MoeNotes C17 parser and Skia CPU rendering.
 Version 0.3 also builds as a WASM SDK for integration into other frontends;
 this repository does not include a frontend application. See [WASM API](docs/WASM.md).
@@ -12,11 +12,13 @@ not the final art direction or a pixel-identical reproduction of the game.
 ![Synthetic print chart preview](tests/golden/synthetic-print.png)
 
 White and black sheets use a responsive song header: enlarged cover/title,
-difficulty badge, BPM and total Combo, author credits, and a prominent
-`moenotes` / `bdon.moe` signature. Narrow sheets stack the information; titles
-and credits wrap to two lines before ellipsis. The header shows total Combo
-rather than conflating it with visible note shapes. Original counts remain in
-the render report. Overflow events appear in a separate chart-notes section.
+a difficulty-colored badge, BPM and total Combo, author credits, chart facts
+(length and note counts by kind) on wide sheets, and a prominent
+`moenotes` / `bdon.moe` signature; the footer is a single credit line. Narrow
+sheets stack the information; titles and credits wrap to two lines before
+ellipsis. The header shows total Combo rather than conflating it with visible
+note shapes. Original counts remain in the render report. Overflow events appear
+in a separate chart-notes section.
 
 ## Quick start
 
@@ -59,6 +61,7 @@ moenotes-chart-renderer inspect chart.json -o parsed.json
 
 Each chart produces one PNG, with time running upward in each column and columns
 read left to right. Columns balance around 24 beats and break at measure boundaries.
+White/black columns share a top line; chart text and gutters scale with wide sheets.
 There is **no chart pagination**. Oversized requests fail with a scale hint instead
 of silently splitting the chart or lowering image quality.
 
@@ -66,8 +69,10 @@ Defaults: 64 px/beat, 10 px/lane, 8 px note body, 10 px arrow height and 2×
 supersampling. The two presets are `--theme white` (default) and `--theme black`
 (deep neutral black). `print` is an alias for white; `dark` retains the legacy
 blue-black screen palette. White uses white paper, dark text, fine grids,
-outlined notes and lightly filled slide ribbons. Built-in Flick arrows, double-line
-Trace notes, critical diamonds and dashed guides remain distinct in grayscale.
+outlined notes with opaque hue fills and lightly filled slide ribbons. Built-in
+Flick chevrons, double-line Trace notes, gold critical diamonds, solid fever
+fields and dashed guides remain distinct in grayscale. See
+[print sheets](docs/PRINT.md) for note and label rules.
 External skins retain their source
 sprites; print mode adds body outlines, but their pale arrows may be less suitable
 for grayscale printing than the built-in artwork. PNG output remains one complete
@@ -196,6 +201,8 @@ Default `musical` mode uses tick ratios and reflected edge easing; optional
 `native-parameters` is a flat parameter study, not game camera/shader emulation.
 
 BPM, meter, Skill, relative Call rhythms and source fade flags are annotated.
+White/black omit a constant integral BPM beside the chart because the header
+states it; the report keeps every source annotation.
 Temporal fade behavior and absolute Call schedules are not guessed. Nonmonotonic
 lines fail, untested shared graphs retain parser warnings. Complex-script shaping,
 SVG/PDF, playback and native pixel equivalence are outside this release.

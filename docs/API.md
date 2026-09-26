@@ -33,6 +33,11 @@ height can vary with title/credit wrapping. Score geometry and column cuts do no
 change. `Report.chart_offset_y` is the logical-pixel vertical offset from Scene
 coordinates to the final sheet. Reported `flick_callouts[].y` already includes it;
 apply `output_scale` only when converting those coordinates to exported pixels.
+In white/black (`columns_top_aligned`), each column's last measure sits on one
+shared top line and unused height is left below shorter columns; legacy dark
+keeps bottom-aligned column starts. Time still runs upward at the same scale.
+`chart_text_scale` (1..1.8, 1 for dark) enlarges bar numbers, times and side
+labels together with their gutters, so column width grows on wide sheets.
 `flick_layout` defaults to `FlickLayout::Callout`; `Inline` restores original placement.
 Built-in colliding arrows use side rails and leader lines; source ticks and bodies
 remain unchanged. Reports preserve `inline_arrow_body_box_overlaps`, remaining
@@ -48,7 +53,8 @@ is made that Skia handles are `Send`/`Sync`; allocate one renderer per worker.
 Diagnostic wording is descriptive, not a stable machine protocol. New required Rust option fields and the default appearance changed in 0.3; use
 `..RenderOptions::default()` and select a theme explicitly when migrating. Values and
 options are pinned for the 0.3 API; incompatible facade changes increment minor
-version during 0.x. Render report schema is v3. No ID is a persistent chart ID.
+version during 0.x. Render report schema is v4 (v4 adds `chart_text_scale` and
+`columns_top_aligned`; white/black callout y values follow top alignment). No ID is a persistent chart ID.
 
 `Metadata` includes title/difficulty/level/artist/author, optional cover path for
 CLI I/O, optional master FC and provenance. The memory API uses the explicit

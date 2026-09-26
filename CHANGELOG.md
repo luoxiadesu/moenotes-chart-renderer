@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased — sheet layout
+
+- White/black columns align their last measure to one top line; shorter columns
+  leave space below. Headings share one row with each column's end time. Time
+  direction, tick scale and column cuts are unchanged; legacy dark stays
+  bottom-aligned and pixel-identical.
+- Bar numbers, times, side labels and leader lines scale with wide sheets
+  (`chart_text_scale` 1–1.8), widening their gutters; images get wider.
+- Lane, beat and measure rules snap to whole output pixels; major measures
+  are two pixels.
+- Wide headers show length and visible TAP/SLIDE/FLICK/TRACE/CRITICAL counts
+  beside the title when they fit. EASY/NORMAL/HARD/EXPERT badges are
+  blue/green/amber/red with the name printed; other names stay neutral.
+- The footer is one muted `moenotes · bdon.moe` line with the reading direction;
+  the header keeps the wordmark.
+- Report schema v4 adds `chart_text_scale` and `columns_top_aligned`; white/black
+  `flick_callouts[].y` follow top alignment.
+- Documentation describes critical styling for the built-in artwork; external
+  packs keep their own critical mark in white.
+
+## Unreleased — note styling
+
+- White notes use opaque hue fills under their dark outlines (Tap cyan, Slide
+  periwinkle), one pale highlight instead of a second dark top edge.
+- Built-in Flick arrows are round-capped vector chevrons scaled to the arrow
+  height in white, black and side rails; narrow left/right Flick draws one chevron.
+  Arrow boxes, spacing and callout positions are unchanged.
+- White/black critical notes use a body-sized gold diamond with an outline and a
+  warm underlay/glow. `--native-critical` and legacy dark keep their marks.
+- Fever ranges are one opaque warm field over the lane bands, with a wider rail;
+  the legend matches.
+- A constant integral BPM is no longer repeated beside the first measure; short
+  Call rhythms (e.g. `50%/100%`) are two-line side labels instead of a CHART NOTES
+  row. Sheets without appendix entries omit that section, so image heights may
+  shrink; `chart_offset_y`, columns, ticks and report annotations are unchanged.
+- Decimal levels such as `27.5` shrink to fit the difficulty badge instead of
+  being truncated.
+- Legacy dark output is pixel-identical. Linux white, narrow and black
+  baselines were re-reviewed.
+
 ## Unreleased — sheet presentation
 
 - Enlarge title, cover, difficulty and total Combo on white/black sheets; use

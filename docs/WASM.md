@@ -88,6 +88,8 @@ White/black exports reserve responsive header and footer space. Their image heig
 can change when the title or author credits wrap. `report.chart_offset_y` describes
 the logical vertical shift from Scene coordinates; `flick_callouts[].y` already
 includes this shift. The note timeline and column cuts remain unchanged.
+White/black columns are top-aligned (`report.columns_top_aligned`) and their chart
+text scales with `report.chart_text_scale`; see API.md.
 
 For a higher-resolution export, render again with `options.output_scale: 2`.
 That changes PNG pixels without reflowing columns, moving notes or altering ticks.

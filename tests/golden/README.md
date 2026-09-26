@@ -4,16 +4,23 @@
 
 `synthetic-print.png` is the default print theme (1032 x 670); the complete
 single-column `synthetic-print-narrow.png` (360 x 1145) exercises minimum lane width,
-cover, CJK title, FC, wrapped legend and stacked timestamps. Both were rendered
-and visually reviewed on Linux x86_64 / FreeType with Rust 1.98.1 and Skia 0.153.3
-on 2026-09-25, from the local responsive-header changes based on `a806ace`.
-Review included whole real sheets at reduced display widths, long titles/credits,
-compact layout and the exact complete synthetic baselines.
+cover, CJK title, FC, wrapped legend and stacked timestamps. Both were first
+reviewed on 2026-09-25 from the responsive-header changes based on `a806ace`.
+They were re-rendered and visually reviewed on Linux x86_64 / FreeType with
+Rust 1.98.1 and Skia 0.153.3 on 2026-09-26 for the note-styling changes based
+on `f429a46` (opaque note fills, vector Flick chevrons, gold critical diamond,
+solid fever field), then again the same day for the sheet-layout changes
+(top-aligned columns with a shared heading row and end times, pixel-snapped
+grid rules, difficulty-colored badges only for standard names, one-line
+footer). The synthetic sheets are narrower than 1500 px, so chart text scale
+and header facts stay at their base form; dimensions are unchanged. Wide-sheet
+text scaling and header facts were reviewed on real sheets alongside a
+340-chart white/black geometry regression.
 
 | File | SHA-256 |
 | --- | --- |
-| synthetic-print.png | 87686cfde66f265619e2b96a802edfbe5f250ae895d179dc8bd65885a28067de |
-| synthetic-print-narrow.png | 5925500c11f71f1dec7f564e34635c096f79578a9c45970b1984d356e462e3f7 |
+| synthetic-print.png | 03b5e78bfc045fb7a9d40320dddd8453d45a5da5c55aab42c7bb5539894399b7 |
+| synthetic-print-narrow.png | 5d86e7d792ffa42dd1e1bc4eb8dbdb0f19662fb0b6b21bf7a10fb290007cc740 |
 
 Use `--theme print` and optionally `--narrow` with `check_golden.py` to check them.
 These remain complete images; the narrow case is not a crop or page. Linux CI
@@ -23,11 +30,12 @@ Do not copy Linux print pixels into a purported native baseline.
 
 ## Deep black preset
 
-`synthetic-black.png` is the new neutral deep-black preset, reviewed on Linux
-with Rust 1.98.1 / Skia 0.153.3 on 2026-09-25. SHA-256:
-`e3eb63a1ddb2c1d4b6e432cb9ee62dafa01410b088d8b0552c9d7071a7dae5ca`.
-It is the same complete 1032 x 670 synthetic sheet, from local changes based on
-`a806ace`. Check it with `--theme black`.
+`synthetic-black.png` is the neutral deep-black preset, first reviewed on
+2026-09-25 from local changes based on `a806ace` and re-reviewed on Linux with
+Rust 1.98.1 / Skia 0.153.3 on 2026-09-26 for the note-styling changes based on
+`f429a46`, then for the sheet-layout changes. SHA-256:
+`3b7265b43ce74bcd7d286fb256e655293a445f9e0227eb23e00c4931e01f3e71`.
+It is the same complete 1032 x 670 synthetic sheet. Check it with `--theme black`.
 Native Windows/macOS black pixel baselines have not yet been reviewed.
 
 ## Legacy dark theme

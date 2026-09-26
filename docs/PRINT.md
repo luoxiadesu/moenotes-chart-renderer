@@ -1,21 +1,76 @@
 # Print sheets
 
 The default `white` theme (`print` alias) uses a white canvas, dark text, light grids and pale
-slide fills. The original built-in notes have dark outlines and top edges;
-Trace notes have a double line, critical notes a diamond, and guides dashed
-edges. These cues remain visible when converted to grayscale. External packs
-retain their original sprites with a body outline; use the built-in artwork
+slide fills. The built-in notes have dark outlines over opaque fills
+that follow the screen hues, so Tap (cyan) and Slide (periwinkle) differ in hue
+and lightness; Trace notes have a double line, critical notes a gold diamond
+with a warm underlay, and guides dashed edges. Outlines and shapes keep these
+cues visible in grayscale. The note styling below describes the built-in
+artwork. External packs retain their original sprites with a body outline (in
+white their critical mark is the pack's own); use the built-in artwork
 for the most consistent contrast on paper.
+
+## Notes, Flick, critical and fever
+
+- Built-in Flick arrows use round-capped vector chevrons whose stroke scales
+  with `--arrow-height`; left/right Flick narrower than 14 px draws one chevron.
+  The arrow box, its spacing reservation and callout rails are unchanged.
+- With the built-in artwork, a critical diamond is sized to the note body (about 60% of
+  `--note-height` each side of center, at least 3 px) with a dark outline and a
+  warm glow/underlay. `--native-critical` keeps the source mark; legacy `dark`
+  keeps its original small mark.
+- Black keeps skin sprites for bodies and draws built-in Flick arrows with the
+  same vector chevrons as rails.
+- A fever range is one opaque warm field across the track, replacing the lane
+  bands beneath it, with a 2.5 px rail on the left.
+
+## Columns, chart text and grid
+
+- Every column's last measure sits on one shared top line; shorter columns end
+  above the bottom, so all columns start reading at the same height. Time still
+  runs upward at one scale. Column headings share a single row, with each
+  column's end time right-aligned beside its heading when both fit the track.
+- Bar numbers, times, side labels and their leader lines scale with the sheet
+  (`chart_text_scale`, 1–1.8 following the header). The bar-number and label
+  gutters widen by the same factor; lane width and time scale are unchanged.
+- Lane, beat and measure rules are placed on whole output pixels. Measure
+  lines are one pixel (major every four measures: two pixels); beat/lane
+  hierarchy uses opacity, not sub-pixel widths, so rules stay crisp after
+  supersampling and export scaling.
+
+## Header and footer
+
+- Wide sheets show chart facts between the title and the wordmark: length and
+  visible TAP/SLIDE/FLICK/TRACE/CRITICAL counts. SLIDE counts starts, relay
+  points and ends, so the four kinds sum to the visible note count; CRITICAL is
+  a flag on other kinds. Facts are omitted when they would meet a long title.
+- EASY/NORMAL/HARD/EXPERT badges use ordered blue/green/amber/red fills with the
+  name and level always printed; other difficulty names keep the neutral badge.
+  The fills were checked with the dataviz palette validator on each surface.
+- The header keeps the moenotes wordmark and bdon.moe. The footer is a single
+  muted line, `moenotes · bdon.moe`, with the reading direction when it fits.
+
+## Side labels
+
+- A constant integral BPM, already exact in the header, is not repeated beside
+  the first measure. Varying or non-integral tempos stay beside the chart and
+  every source value remains in `annotations` in the report.
+- A Call with a short rhythm list (up to 8 characters, e.g. `50%/100%`) is a
+  two-line side label. Longer lists keep `CALL ↳` and appear under CHART NOTES.
+- A label either fits beside its column in full or moves to CHART NOTES.
+  `annotation_overflow` counts rows in that appendix; the section is omitted
+  when there is nothing to list.
+- Decimal master levels such as `27.5` shrink to fit the difficulty badge
+  instead of being truncated. Integral levels keep their size.
 
 White and deep black now share a responsive information hierarchy. Large sheets
 use a 75 px title, a 190 px cover, a difficulty badge and grouped BPM/total Combo;
 the moenotes wordmark and bdon.moe site occupy their own masthead area. Small sheets
 use compact sizes and stacked rows. Titles and credits wrap to two lines, with
 ellipsis for any remaining text; the full strings remain in the report.
-The seven-item legend uses note/guide/fever shapes. Column headings sit above
-their own tracks, and major measure labels have greater weight. The chart-notes
-section uses bar and quarter-note-beat coordinates rather than raw tick numbers.
-The independent footer repeats moenotes and bdon.moe at readable sizes.
+The seven-item legend uses note/guide/fever shapes. Major measure labels have
+greater weight. The chart-notes section uses bar and quarter-note-beat
+coordinates rather than raw tick numbers.
 
 ```sh
 moenotes-chart-renderer render chart.json -o print.png

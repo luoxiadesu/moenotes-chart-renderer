@@ -18,6 +18,9 @@ pub(super) struct Header {
     credit_y: f64,
     credit_lines: Vec<String>,
     legend_y: f64,
+    /// Left edge of the chart-facts row, when it fits beside the title.
+    facts_x: Option<f64>,
+    facts_cell: f64,
 }
 
 impl Header {
@@ -29,8 +32,24 @@ impl Header {
         let hero_top = if compact { 82. } else { margin };
         let cover_size = if compact { 64. } else { 76. * scale };
         let text_x = margin + if cover { cover_size + 18. * scale } else { 0. };
+        let brand_x = width - margin - 210. * scale;
         let text_width = width - margin - text_x - if compact { 0. } else { 240. * scale };
         let title_size = if compact { 22. } else { 30. * scale as f32 };
+        // Chart facts sit between the title and the brand when six cells fit
+        // after the measured title/artist line; otherwise they are omitted.
+        let facts_cell = 96. * scale;
+        let facts_width = 6. * facts_cell;
+        let measured = fonts
+            .width(&metadata.title, title_size, true)
+            .max(fonts.width(&metadata.artist, 15. * scale as f32, false))
+            as f64;
+        let facts_x = (!compact)
+            .then_some(brand_x - 36. * scale - facts_width)
+            .filter(|&fx| fx - 44. * scale >= text_x + measured);
+        let text_width = match facts_x {
+            Some(fx) => (fx - 44. * scale - text_x).min(text_width),
+            None => text_width,
+        };
         let title_lines = fonts.lines(&metadata.title, title_size, true, text_width as f32, 2);
         let title_bottom = hero_top
             + title_size as f64
@@ -75,6 +94,8 @@ impl Header {
             credit_y,
             credit_lines,
             legend_y,
+            facts_x,
+            facts_cell,
         }
     }
 
@@ -200,38 +221,54 @@ impl Header {
             &metadata.difficulty
         };
         let badge_width = 176. * s;
-        let mut fill = paint(accent);
-        fill.set_alpha_f(if scene.layout.options.theme == Theme::Print {
-            0.075
-        } else {
-            0.12
-        });
+        let tone = difficulty_colors(difficulty, scene.layout.options.theme);
+        let (badge_fill, badge_text) = match tone {
+            Some((fill, text)) => (paint(fill), text),
+            None => {
+                let mut fill = paint(accent);
+                fill.set_alpha_f(if scene.layout.options.theme == Theme::Print {
+                    0.075
+                } else {
+                    0.12
+                });
+                (fill, accent)
+            }
+        };
         let badge = Rect::from_xywh(
             margin as f32,
             self.stats_y as f32,
             badge_width as f32,
             36. * s as f32,
         );
-        c.draw_round_rect(badge, 4. * s as f32, 4. * s as f32, &fill);
+        c.draw_round_rect(badge, 4. * s as f32, 4. * s as f32, &badge_fill);
         fonts.draw(
             c,
             difficulty,
             margin + 12. * s,
             self.stats_y + 24. * s,
             13. * s as f32,
-            accent,
+            badge_text,
             true,
             100. * s as f32,
         );
+        // Keep the master level text verbatim; shrink decimal levels such as
+        // "27.5" to the badge's number field instead of truncating them.
+        let level_space = 54. * s as f32;
+        let level_size = (23. * s as f32)
+            .min(
+                23. * s as f32 * level_space
+                    / fonts.width(&metadata.level, 23. * s as f32, true).max(1.),
+            )
+            .max(15. * s as f32);
         fonts.draw(
             c,
             &metadata.level,
             margin + 117. * s,
             self.stats_y + 27. * s,
-            23. * s as f32,
-            accent,
+            level_size,
+            badge_text,
             true,
-            50. * s as f32,
+            level_space + 1.,
         );
         let bpm = metric_bpm(scene);
         let fc = metadata
@@ -277,6 +314,42 @@ impl Header {
                 75. * s as f32,
             );
         }
+        if let Some(panel_x) = self.facts_x {
+            // Chart facts fill the space between the title block and the brand:
+            // label above value, in text ink; no color carries meaning here.
+            let facts = SheetStats::of(scene);
+            let cell = self.facts_cell;
+            for (i, (label, value)) in facts.items().iter().enumerate() {
+                let fx = panel_x + i as f64 * cell;
+                fonts.draw(
+                    c,
+                    label,
+                    fx,
+                    self.hero_top + 22. * s,
+                    10.5 * s as f32,
+                    palette.muted,
+                    false,
+                    (cell - 8. * s) as f32,
+                );
+                fonts.draw(
+                    c,
+                    value,
+                    fx,
+                    self.hero_top + 52. * s,
+                    22. * s as f32,
+                    palette.text,
+                    true,
+                    (cell - 8. * s) as f32,
+                );
+            }
+            stroke(
+                c,
+                (panel_x - 20. * s, self.hero_top + 4. * s),
+                (panel_x - 20. * s, self.hero_top + 60. * s),
+                palette.rule,
+                1.,
+            );
+        }
         for (i, line) in self.credit_lines.iter().enumerate() {
             fonts.draw(
                 c,
@@ -315,16 +388,6 @@ impl Header {
                     &p,
                 );
             } else if *role == "fever" {
-                let gold = Color::from_rgb(168, 143, 90);
-                stroke(
-                    c,
-                    (x + 2. * s, y - 11. * s),
-                    (x + 2. * s, y + 2. * s),
-                    gold,
-                    2. * s as f32,
-                );
-                let mut fill = paint(gold);
-                fill.set_alpha_f(0.09);
                 c.draw_rect(
                     Rect::from_xywh(
                         (x + 4. * s) as f32,
@@ -332,7 +395,18 @@ impl Header {
                         19. * s as f32,
                         13. * s as f32,
                     ),
-                    &fill,
+                    &paint(if scene.layout.options.theme == Theme::Print {
+                        PRINT_FEVER
+                    } else {
+                        BLACK_FEVER
+                    }),
+                );
+                stroke(
+                    c,
+                    (x + 2. * s, y - 11. * s),
+                    (x + 2. * s, y + 2. * s),
+                    FEVER_RAIL,
+                    2.5 * s as f32,
                 );
             } else {
                 c.save();
@@ -350,11 +424,7 @@ impl Header {
                     strict_assets: scene.layout.options.strict_assets,
                 };
                 for part in [NotePart::Body, NotePart::Arrow, NotePart::Mark] {
-                    if scene.layout.options.theme == Theme::Print {
-                        draw_print_note(c, skin, &note, part)?;
-                    } else {
-                        skin.draw_preview_part(c, &note, part)?;
-                    }
+                    draw_note_part(c, skin, &note, part, scene.layout.options.theme)?;
                 }
                 c.restore();
             }
@@ -390,6 +460,86 @@ fn legend_cells(width: f64) -> usize {
     }
 }
 
+/// Header facts computed from the parsed chart. Counts are visible glyphs by
+/// kind; critical is a flag across kinds, so it is listed separately.
+pub(super) struct SheetStats {
+    pub duration_ms: i32,
+    pub tap: usize,
+    pub slide: usize,
+    pub flick: usize,
+    pub trace: usize,
+    pub critical: usize,
+}
+impl SheetStats {
+    pub fn of(scene: &Scene) -> Self {
+        let mut s = Self {
+            duration_ms: scene
+                .glyphs
+                .iter()
+                .map(|g| g.note.time_ms)
+                .max()
+                .unwrap_or(0)
+                .max(0),
+            tap: 0,
+            slide: 0,
+            flick: 0,
+            trace: 0,
+            critical: 0,
+        };
+        for g in &scene.glyphs {
+            match g.note.role() {
+                Some("tap") => s.tap += 1,
+                Some("slide" | "connection" | "slide_end") => s.slide += 1,
+                Some(r) if r.starts_with("flick") => s.flick += 1,
+                Some("trace") => s.trace += 1,
+                _ => {}
+            }
+            s.critical += usize::from(g.note.critical);
+        }
+        s
+    }
+    pub fn duration(&self) -> String {
+        let seconds = self.duration_ms / 1000;
+        format!("{}:{:02}", seconds / 60, seconds % 60)
+    }
+    pub fn items(&self) -> [(&'static str, String); 6] {
+        [
+            ("LENGTH", self.duration()),
+            ("TAP", self.tap.to_string()),
+            ("SLIDE", self.slide.to_string()),
+            ("FLICK", self.flick.to_string()),
+            ("TRACE", self.trace.to_string()),
+            ("CRITICAL", self.critical.to_string()),
+        ]
+    }
+}
+
+/// Difficulty badge fill and text colors. Standard names get an ordered hue;
+/// anything else keeps the neutral accent tint. The name is always printed.
+pub(super) fn difficulty_colors(name: &str, theme: Theme) -> Option<(Color, Color)> {
+    let print = theme == Theme::Print;
+    let rgb = |h: u32| Color::from_rgb((h >> 16) as u8, (h >> 8) as u8, h as u8);
+    // Validated as an adjacent 4-slot categorical set on each surface
+    // (dataviz validate_palette.js: light #ffffff / dark #08090c).
+    let (fill, text) = match name.to_ascii_uppercase().as_str() {
+        "EASY" => (
+            if print { 0x256abf } else { 0x3987e5 },
+            if print { 0xffffff } else { 0x0b0d12 },
+        ),
+        "NORMAL" => (
+            if print { 0x008300 } else { 0x199e70 },
+            if print { 0xffffff } else { 0x0b0d12 },
+        ),
+        "HARD" => (if print { 0xeda100 } else { 0xc98500 }, 0x111827),
+        "EXPERT" => (
+            if print { 0xc0302d } else { 0xe34948 },
+            if print { 0xffffff } else { 0x0b0d12 },
+        ),
+        _ => return None,
+    };
+    Some((rgb(fill), rgb(text)))
+}
+
 pub(super) fn location(scene: &Scene, tick: i32) -> String {
     let index = scene
         .layout
@@ -413,6 +563,8 @@ pub(super) fn footer(
     height: i32,
     scale: f64,
 ) {
+    // The header carries the moenotes / bdon.moe wordmark; the footer is a
+    // single quiet credit line with the reading direction.
     let margin = if width < 760 { 20. } else { 24. * scale };
     let y = height as f64 - 29. * scale;
     stroke(
@@ -422,36 +574,32 @@ pub(super) fn footer(
         palette.rule,
         1.,
     );
+    let size = 12. * scale as f32;
+    let credit = "moenotes  ·  bdon.moe";
     fonts.draw(
         c,
-        "moenotes",
+        credit,
         margin,
         y,
-        18. * scale as f32,
-        palette.text,
-        true,
-        130. * scale as f32,
-    );
-    fonts.draw(
-        c,
-        "bdon.moe",
-        margin + 140. * scale,
-        y,
-        14. * scale as f32,
+        size,
         palette.muted,
         false,
-        110. * scale as f32,
+        (width as f64 - 2. * margin) as f32,
     );
-    if width >= 760 {
+    let direction = "TIME ↑   ·   COLUMNS →";
+    let direction_width = fonts.width(direction, size, false) as f64;
+    if margin + fonts.width(credit, size, false) as f64 + 24. * scale + direction_width
+        <= width as f64 - margin
+    {
         fonts.draw(
             c,
-            "TIME ↑   ·   COLUMNS →",
-            width as f64 - margin - 265. * scale,
+            direction,
+            width as f64 - margin - direction_width,
             y,
-            12. * scale as f32,
+            size,
             palette.muted,
             false,
-            265. * scale as f32,
+            direction_width as f32 + 1.,
         );
     }
 }
@@ -473,6 +621,66 @@ mod tests {
             assert!(header.height > layout::HEADER);
         }
         Ok(())
+    }
+
+    #[test]
+    fn chart_facts_fit_beside_title_or_are_omitted() -> Result<()> {
+        let fonts = Fonts::builtin()?;
+        let short = Metadata {
+            title: "起死開戦".into(),
+            artist: "millsage".into(),
+            ..Metadata::default()
+        };
+        let wide = Header::plan(5348, &fonts, &short, true);
+        let fx = wide.facts_x.expect("room for facts on a wide sheet");
+        let brand_x = 5348. - wide.margin - 210. * wide.scale;
+        assert!(fx + 6. * wide.facts_cell <= brand_x);
+        // The title never runs under the facts row.
+        assert!(wide.text_x + wide.text_width <= fx);
+        assert!(Header::plan(700, &fonts, &short, true).facts_x.is_none());
+        let long = Metadata {
+            title: "A very long song title that fills the whole header line ".repeat(3),
+            ..Metadata::default()
+        };
+        assert!(Header::plan(2400, &fonts, &long, true).facts_x.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn chart_facts_count_visible_notes_by_kind() -> Result<()> {
+        let score = crate::parser::Score::parse(
+            br#"{"events":{},"notes":[{"t":0,"pos":0,"size":4,"crit":true},{"type":"flick","dir":"left","t":480,"pos":4,"size":4},{"type":"trace","t":960,"pos":8,"size":4},{"type":"long","node":[{"t":1440,"pos":0,"size":4},{"t":1920,"pos":0,"size":4},{"t":2400,"pos":0,"size":4}]}]}"#,
+            false,
+        )?;
+        let scene = Scene::build(
+            &score,
+            crate::layout::Layout::build(&score, crate::layout::Options::default())?,
+        )?;
+        let s = SheetStats::of(&scene);
+        assert_eq!((s.tap, s.flick, s.trace, s.critical), (1, 1, 1, 1));
+        assert_eq!(s.tap + s.slide + s.flick + s.trace, scene.glyphs.len());
+        assert_eq!(s.slide, 3);
+        assert_eq!(s.duration(), format!("0:{:02}", s.duration_ms / 1000));
+        Ok(())
+    }
+
+    #[test]
+    fn standard_difficulties_have_distinct_badges_and_others_stay_neutral() {
+        for theme in [Theme::Print, Theme::Black] {
+            let fills: Vec<_> = ["EASY", "NORMAL", "HARD", "EXPERT"]
+                .iter()
+                .map(|d| difficulty_colors(d, theme).unwrap().0)
+                .collect();
+            for (i, a) in fills.iter().enumerate() {
+                assert!(fills[i + 1..].iter().all(|b| a != b));
+            }
+            assert_eq!(
+                difficulty_colors("expert", theme),
+                difficulty_colors("EXPERT", theme)
+            );
+            assert!(difficulty_colors("TEST", theme).is_none());
+            assert!(difficulty_colors("", theme).is_none());
+        }
     }
 
     #[test]

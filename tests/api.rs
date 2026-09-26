@@ -28,7 +28,10 @@ fn large_logical_sheet_can_be_exported_below_pixel_budget() {
     assert_eq!(result.pages.len(), 1);
     let image = &result.report.images[0];
     assert!(image.logical_width as i64 * image.logical_height as i64 > 64_000_000);
-    assert_eq!(image.width, 10206);
+    assert_eq!(
+        image.width,
+        (image.logical_width as f64 * 0.5).ceil() as i32
+    );
     assert_eq!(
         image.height,
         (image.logical_height as f64 * 0.5).ceil() as i32
@@ -230,6 +233,55 @@ fn print_and_dark_keep_the_same_chart_counts() {
         reports[1].statistics.reconstructed_full_combo
     );
     assert_eq!(reports[0].images[0].width, reports[1].images[0].width);
+}
+
+#[test]
+fn modern_note_styling_keeps_chart_geometry_and_counts() {
+    use moenotes_chart_renderer::api::Theme;
+    // Critical run, left/right/up Flick, trace, fever and a short Call: the
+    // presentation layer must not move ticks, columns or callout positions.
+    let chart = br#"{"events":{"bpm":[{"t":0,"bpm":170}],"fever":[[0,1920]],"call":[{"t":0,"timing":[0,1,0,1]}]},"notes":[{"t":480,"pos":2,"size":6,"crit":true},{"t":600,"pos":2,"size":6,"crit":true},{"type":"flick","dir":"left","t":960,"pos":4,"size":8},{"type":"flick","dir":"right","t":1200,"pos":14,"size":8},{"type":"flick","t":1440,"pos":10,"size":4},{"type":"trace","t":1680,"pos":12,"size":4}]}"#;
+    let renderer = Renderer::builtin().unwrap();
+    for theme in [Theme::Print, Theme::Black] {
+        let mut reports = vec![];
+        for native_critical in [false, true] {
+            reports.push(
+                renderer
+                    .render(
+                        chart,
+                        RenderOptions {
+                            theme,
+                            native_critical,
+                            supersample: 1,
+                            ..RenderOptions::default()
+                        },
+                        Metadata {
+                            title: "Styling".into(),
+                            level: "27.5".into(),
+                            ..Metadata::default()
+                        },
+                        false,
+                        "styling.png",
+                        None,
+                    )
+                    .unwrap()
+                    .report,
+            );
+        }
+        let (modern, native) = (&reports[0], &reports[1]);
+        assert_eq!(modern.glyphs, native.glyphs);
+        assert_eq!(modern.columns, native.columns);
+        assert_eq!(modern.chart_offset_y, native.chart_offset_y);
+        assert_eq!(
+            modern.images[0].logical_height,
+            native.images[0].logical_height
+        );
+        assert_eq!(modern.mark_body_box_overlaps, 0);
+        assert_eq!(modern.arrow_body_box_overlaps, 0);
+        // A short Call is drawn beside the chart, so no appendix row is needed.
+        assert_eq!(modern.annotation_overflow, 0);
+        assert!(modern.annotations.iter().any(|a| a.label == "170.00 BPM"));
+    }
 }
 
 #[test]
