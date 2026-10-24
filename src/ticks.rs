@@ -172,6 +172,31 @@ mod tests {
     }
 
     #[test]
+    fn long_contributes_exactly_its_two_endpoints() -> Result<()> {
+        let s = score(
+            r#"{"events":{},"notes":[{"type":"long","node":[
+                {"t":480,"pos":0,"size":6},{"t":720,"pos":4,"size":6},{"t":1200,"pos":8,"size":6}]}]}"#,
+        )?;
+        // The middle slide connection is not a rhythm event.
+        assert_eq!(rhythm_ticks(&s), [480, 1200]);
+        Ok(())
+    }
+
+    #[test]
+    fn guide_contributes_nothing_to_the_rail() -> Result<()> {
+        let s = score(
+            r#"{"events":{},"notes":[
+                {"type":"guide","node":[
+                    {"t":480,"pos":0,"size":6},{"t":720,"pos":4,"size":6},{"t":1200,"pos":8,"size":6}]},
+                {"t":1920}]}"#,
+        )?;
+        // Only the standalone tap is a rhythm event; none of the guide's nodes are.
+        assert_eq!(rhythm_ticks(&s), [1920]);
+        assert_eq!(tick_labels(&s).len(), 1);
+        Ok(())
+    }
+
+    #[test]
     fn label_collisions_are_left_to_the_renderer() -> Result<()> {
         // Two onsets 120 ticks apart are both labelled; dropping the crowded one is a pixel-space decision.
         let s = score(r#"{"events":{},"notes":[{"t":0},{"t":120},{"t":1920}]}"#)?;
