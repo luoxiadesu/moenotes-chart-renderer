@@ -899,10 +899,21 @@ static int beat_position(moenotes_score_t *s, int32_t bar, double progress, int3
         return fail(s, MOENOTES_ERR_RANGE);
     out->bar = bar;
     out->bar_progress = p;
-    out->rhythmic_unit = (int32_t)(bar_rhythm(g) * 2.0f);
-    if (out->rhythmic_unit < 1)
-        return fail(s, MOENOTES_ERR_UNSUPPORTED);
-    out->rhythm = even_round(p * (float)out->rhythmic_unit);
+    {
+        /* Sub-beat bars (1/8 and finer) have a fractional `bar_rhythm * 2`;
+         * the native rhythm unit is still a grid of at least one step. */
+        double unit = (double)bar_rhythm(g) * 2.0;
+        if (unit < 1.0)
+            unit = 1.0;
+        if (unit > INT32_MAX)
+            return fail(s, MOENOTES_ERR_RANGE);
+        out->rhythmic_unit = (int32_t)unit;
+        out->rhythm = even_round(p * (float)out->rhythmic_unit);
+        /* Positions at the bar end are rounded to the last unit instead of
+         * reporting a range error, matching the native rhythm clamp. */
+        if (out->rhythm >= out->rhythmic_unit)
+            out->rhythm = out->rhythmic_unit - 1;
+    }
     return 1;
 }
 typedef struct beat_candidate {
@@ -958,12 +969,20 @@ static int add_combos(moenotes_score_t *s) {
                 }
                 progress += step;
                 if (progress >= 1) {
-                    if (bar == INT32_MAX) {
+                    /* A bar shorter than half a beat (1/16 or finer) makes
+                     * `step` two or more, so one subtraction is not enough;
+                     * carrying the remainder keeps the next position inside
+                     * the advanced bar instead of at progress 1.0. Round
+                     * floating drift below the tolerance into the bar end so
+                     * exact grid positions keep their bar/progress. */
+                    progress = progress < 1.0 + 1e-9 ? 1.0 : progress;
+                    double bars = floor(progress);
+                    if (bars > (double)(INT32_MAX - bar) || bar + (int32_t)bars == INT32_MAX) {
                         fail(s, MOENOTES_ERR_RANGE);
                         goto done;
                     }
-                    bar++;
-                    progress -= 1;
+                    bar += (int32_t)bars;
+                    progress -= bars;
                     step = 1.0 / (2.0 * (double)bar_rhythm(sig_at_bar(s, bar)));
                 }
                 beat_candidate_t beat;
