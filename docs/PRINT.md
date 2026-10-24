@@ -35,7 +35,9 @@ for the most consistent contrast on paper.
   track with a thin leader line (`/4`, `/8`, `3/16`, …). Values are fractions of
   a whole note, cut at the bar end when a rest crosses the bar line after more
   than half a bar, and off-grid gaps snap to the nearest standard note value.
-  Labels closer together than 10 px are dropped, never squeezed or overlapped.
+  Labels closer together than 10 px are dropped, never squeezed or overlapped;
+  of a crowded pair the earlier (lower on the sheet, earlier in time) label is
+  kept and the later one dropped.
 - Bar numbers, times, side labels and their leader lines scale with the sheet
   (`chart_text_scale`, 1–1.8 following the header). The bar-number and label
   gutters widen by the same factor; lane width and time scale are unchanged.
