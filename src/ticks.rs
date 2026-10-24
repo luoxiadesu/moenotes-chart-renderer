@@ -13,8 +13,9 @@ use serde::Serialize;
 /// Ticks per beat; the parser and layout share this clock.
 pub const PPQ: i32 = 480;
 
-/// Playable onsets: taps, flicks and slide endpoints (trace slides included). Guides, hidden slides and
-/// slide-interior connections are auxiliary, not rhythm events.
+/// Playable onsets: taps, flicks and slide endpoints. Trace lines contribute their two endpoints (61/62) — the
+/// judgement clock counts them — while their interior connections (63), standalone trace drawing (60), guides
+/// and hidden nodes do not open or close a line and stay out of the rail.
 const TICK_OPS: &[u32] = &[1, 20, 22, 40, 41, 42, 61, 62];
 
 /// Standard note-value denominators (binary, dotted, triplets, quintuplets, septuplets).

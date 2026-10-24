@@ -37,7 +37,8 @@ for the most consistent contrast on paper.
   than half a bar, and off-grid gaps snap to the nearest standard note value.
   Labels closer together than 10 px are dropped, never squeezed or overlapped;
   of a crowded pair the earlier (lower on the sheet, earlier in time) label is
-  kept and the later one dropped.
+  kept and the later one dropped, so a dense passage keeps the longer value
+  (e.g. `/8` rather than the `/16` that follows).
 - Bar numbers, times, side labels and their leader lines scale with the sheet
   (`chart_text_scale`, 1–1.8 following the header). The bar-number and label
   gutters widen by the same factor; lane width and time scale are unchanged.
