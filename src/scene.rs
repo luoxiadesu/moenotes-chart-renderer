@@ -3,6 +3,7 @@
 use crate::{
     layout::Layout,
     parser::{Note, Score},
+    ticks::TickLabel,
 };
 use anyhow::{Result, ensure};
 use serde::Serialize;
@@ -39,6 +40,8 @@ pub struct Scene {
     pub ribbons: Vec<Ribbon>,
     pub pairs: Vec<(i32, i32)>,
     pub annotations: Vec<Annotation>,
+    /// Note values for the left rail, one per playable onset (`ticks`).
+    pub tick_labels: Vec<TickLabel>,
     pub fever: Vec<(i32, i32)>,
     pub source_notes: usize,
     pub warnings: Vec<String>,
@@ -296,12 +299,14 @@ impl Scene {
             });
         }
         annotations.sort_by_key(|a| a.tick);
+        let tick_labels = crate::ticks::tick_labels(score);
         Ok(Self {
             layout,
             glyphs,
             ribbons,
             pairs: pairs.into_iter().collect(),
             annotations,
+            tick_labels,
             fever,
             source_notes: score.notes.len(),
             warnings,

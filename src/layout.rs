@@ -4,7 +4,17 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 pub const HEADER: f64 = 184.;
 pub const FOOTER: f64 = 66.;
-pub const LEFT: f64 = 28.;
+/// Left gutter: two rails, bar numbers on the outer one and note values (`ticks`) on the inner one, so the
+/// two never collide.
+pub const LEFT: f64 = 68.;
+/// Bar numbers start this far left of the track's left edge (left-anchored).
+pub const BAR_NUMBER_X: f64 = 66.;
+/// Note values are right-aligned this far left of the track's left edge.
+pub const TICK_RIGHT: f64 = 5.;
+/// Leader line under a note value, from `TICK_LINE.0` to `TICK_LINE.1` left of the track.
+pub const TICK_LINE: (f64, f64) = (24., 2.);
+/// Labels closer together than this vertical gap are dropped, keeping dense passages readable.
+pub const TICK_MIN_GAP: f64 = 10.;
 pub const RIGHT: f64 = 60.;
 pub const GAP: f64 = 12.;
 pub const PAD: f64 = 26.;

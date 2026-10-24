@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — note values
+
+- Every playable onset (taps, flicks, slide endpoints) prints the note value to
+  the next rhythm event on a second left rail (`/4`, `/8`, `3/16`, …), like
+  pjsk.moe's chart-image rail. Gaps snap to standard note values, a rest that
+  crosses the bar line after more than half a bar is cut at the bar end, and
+  labels closer than 10 px are dropped instead of overlapping.
+- The left gutter widens from 28 to 68 px with bar numbers on its outer edge and
+  note values on the inner one; every column is 40 px wider than before.
+
 ## Unreleased — sheet layout
 
 - White/black columns align their last measure to one top line; shorter columns
