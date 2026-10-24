@@ -54,6 +54,17 @@
 - Preserve tick/lane geometry, column cuts, full-image export and legacy dark
   rendering. Review new Linux complete and narrow visual baselines.
 
+## 0.3.1 — sub-beat charts
+
+- Vendor moenotes-chart-parser 0.3.1 (`7431f16`): charts with a 1/16 or finer
+  signature and a slide now convert. Previously any slide crossing such a bar
+  failed with `Combo statistics failed (8): unsupported format or option`.
+- Parsing output is unchanged for ordinary charts; judged notes are identical,
+  only `position.rhythm` on exact structural bar ends is clamped.
+- Includes the sheet layout, note styling and sheet presentation work that was
+  unreleased after 0.3.0. White, black, print and narrow golden baselines report
+  zero pixel error on Linux.
+
 ## 0.3.0 — source preview
 
 - WASM32 Emscripten SDK with typed byte input/PNG output, CJK fonts, resource
