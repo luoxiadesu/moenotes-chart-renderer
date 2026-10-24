@@ -40,7 +40,8 @@ cargo build --release --locked
 
 Rust 1.98.1 and dependency versions are pinned. Skia downloads a supported binary
 cache when available; source fallback needs its LLVM, Python and Ninja tools.
-The parser is included unchanged at v0.3.0, with recorded upstream hashes and
+The parser is included at v0.3.0 plus upstream commit `7431f16` (sub-beat Combo
+fix for issue #1), with recorded upstream hashes and
 C/Rust ABI checks. Supported build targets are 64-bit Linux, Windows and macOS;
 see [CI](https://github.com/luoxiadesu/moenotes-chart-renderer/actions) for actual
 platform status rather than assuming a configured job has passed.
