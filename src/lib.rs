@@ -10,6 +10,7 @@ pub mod parser;
 pub mod render;
 pub mod scene;
 pub mod skin;
+pub mod ticks;
 pub use skin::*;
 #[cfg(not(target_os = "emscripten"))]
 pub mod resources;

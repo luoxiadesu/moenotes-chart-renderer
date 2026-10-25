@@ -11,6 +11,9 @@ replaced atomically. It lists generation, filenames, byte counts and SHA-256.
 Readers requiring a consistent snapshot read this pointer and use only that
 generation. This is the authoritative commit point.
 
+The scene JSON is a diagnostic dump: fields may be added between versions, so readers must ignore
+unknown keys and must not depend on field order.
+
 Sibling `chart.png` and `chart.render.json` remain convenient aliases.
 Legacy numbered outputs from an older manifest are cleaned up on replacement. They are rollback-protected for ordinary I/O errors and stale prior
 page names are removed, but multiple loose files cannot be atomically renamed

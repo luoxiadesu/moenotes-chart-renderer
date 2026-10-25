@@ -30,6 +30,15 @@ for the most consistent contrast on paper.
   above the bottom, so all columns start reading at the same height. Time still
   runs upward at one scale. Column headings share a single row, with each
   column's end time right-aligned beside its heading when both fit the track.
+- The left gutter carries two rails: bar numbers on the outer one and the note
+  value to the next playable onset on the inner one, right-aligned against the
+  track with a thin leader line (`/4`, `/8`, `3/16`, …). Values are fractions of
+  a whole note, cut at the bar end when a rest crosses the bar line after more
+  than half a bar, and off-grid gaps snap to the nearest standard note value.
+  Labels closer together than 10 px are dropped, never squeezed or overlapped;
+  of a crowded pair the earlier (lower on the sheet, earlier in time) label is
+  kept and the later one dropped, so a dense passage keeps the longer value
+  (e.g. `/8` rather than the `/16` that follows).
 - Bar numbers, times, side labels and their leader lines scale with the sheet
   (`chart_text_scale`, 1–1.8 following the header). The bar-number and label
   gutters widen by the same factor; lane width and time scale are unchanged.

@@ -1502,7 +1502,7 @@ pub fn render_memory(
                 fonts.draw(
                     c,
                     &format!("{:03}", bar.number),
-                    x - 26. * ts,
+                    x - layout::BAR_NUMBER_X * ts,
                     y + 3. * ts,
                     size,
                     palette.muted,
@@ -1528,6 +1528,41 @@ pub fn render_memory(
                     }
                     tick += 240;
                 }
+            }
+            // Note values on the inner left rail, right-aligned against the track; the outer rail keeps the
+            // bar numbers. Values closer together than `TICK_MIN_GAP` are dropped, not squeezed: the anchor is
+            // the last label that was kept, so a crowded run keeps its earliest value.
+            let tick_size = if modern { 10. * ts as f32 } else { 9.5 };
+            let tick_color = mix(palette.muted, palette.background, 0.28);
+            let mut previous_y: Option<f64> = None;
+            for label in scene
+                .tick_labels
+                .iter()
+                .filter(|l| col.start <= l.tick && l.tick < col.end)
+            {
+                let y = scene.layout.y(col, label.tick as f64);
+                if previous_y.is_some_and(|previous| previous - y < layout::TICK_MIN_GAP * ts) {
+                    continue;
+                }
+                previous_y = Some(y);
+                stroke(
+                    c,
+                    (x - layout::TICK_LINE.0 * ts, y),
+                    (x - layout::TICK_LINE.1 * ts, y),
+                    tick_color,
+                    0.7,
+                );
+                let width = f64::from(fonts.width(&label.text, tick_size, false));
+                fonts.draw(
+                    c,
+                    &label.text,
+                    x - layout::TICK_RIGHT * ts - width,
+                    y - 2. * ts,
+                    tick_size,
+                    tick_color,
+                    false,
+                    30. * ts as f32,
+                );
             }
             c.save();
             c.clip_rect(rect, None, true);

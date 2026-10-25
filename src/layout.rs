@@ -2,9 +2,25 @@
 use crate::parser::Score;
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
+
+/// Ticks per beat; the parser, layout and the note-value rail share this clock.
+pub const PPQ: i32 = 480;
+/// `PPQ` as a float for scale arithmetic.
+const TICKS_PER_BEAT: f64 = 480.;
+
 pub const HEADER: f64 = 184.;
 pub const FOOTER: f64 = 66.;
-pub const LEFT: f64 = 28.;
+/// Left gutter: two rails, bar numbers on the outer one and note values (`ticks`) on the inner one, so the
+/// two never collide.
+pub const LEFT: f64 = 68.;
+/// Bar numbers start this far left of the track's left edge (left-anchored).
+pub const BAR_NUMBER_X: f64 = 66.;
+/// Note values are right-aligned this far left of the track's left edge.
+pub const TICK_RIGHT: f64 = 5.;
+/// Leader line under a note value, from `TICK_LINE.0` to `TICK_LINE.1` left of the track.
+pub const TICK_LINE: (f64, f64) = (24., 2.);
+/// Labels closer together than this vertical gap are dropped, keeping dense passages readable.
+pub const TICK_MIN_GAP: f64 = 10.;
 pub const RIGHT: f64 = 60.;
 pub const GAP: f64 = 12.;
 pub const PAD: f64 = 26.;
@@ -202,7 +218,7 @@ impl Layout {
             for (i, a) in notes.iter().enumerate() {
                 for b in notes.iter().skip(i + 1) {
                     let delta = b.tick - a.tick;
-                    if delta > 480 {
+                    if delta > PPQ {
                         break;
                     }
                     if delta > 0 && a.left < b.right && b.left < a.right {
@@ -226,7 +242,7 @@ impl Layout {
                                 gap += options.arrow_height + 1.5;
                             }
                         }
-                        spacing = spacing.max(gap * 480. / delta as f64);
+                        spacing = spacing.max(gap * TICKS_PER_BEAT / delta as f64);
                     }
                 }
             }
@@ -267,7 +283,7 @@ impl Layout {
                 .chain([count])
                 .collect()
         } else {
-            balanced_cuts(&bars, options.target_beats * 480.)
+            balanced_cuts(&bars, options.target_beats * TICKS_PER_BEAT)
         };
         let columns: Vec<_> = cuts
             .windows(2)
@@ -280,7 +296,7 @@ impl Layout {
             .collect();
         let track_height = columns
             .iter()
-            .map(|c| (c.end - c.start) as f64 / 480. * options.pixels_per_beat)
+            .map(|c| (c.end - c.start) as f64 / TICKS_PER_BEAT * options.pixels_per_beat)
             .fold(0., f64::max);
         let track = 24. * options.pixels_per_lane;
         let top_aligned = options.theme != Theme::Dark;
@@ -296,8 +312,8 @@ impl Layout {
             height <= i32::MAX as f64,
             "Logical image height exceeds coordinate range"
         );
-        let used =
-            (bars.last().unwrap().tick - bars[0].tick) as f64 / 480. * options.pixels_per_beat;
+        let used = (bars.last().unwrap().tick - bars[0].tick) as f64 / TICKS_PER_BEAT
+            * options.pixels_per_beat;
         let unused = 1. - used / (columns.len() as f64 * track_height);
         let l = Self {
             options,
@@ -326,10 +342,12 @@ impl Layout {
     }
     pub fn y(&self, c: &Column, tick: f64) -> f64 {
         if self.top_aligned {
-            HEADER + self.pad_top + (c.end as f64 - tick) / 480. * self.options.pixels_per_beat
+            HEADER
+                + self.pad_top
+                + (c.end as f64 - tick) / TICKS_PER_BEAT * self.options.pixels_per_beat
         } else {
             HEADER + self.pad_top + self.track_height
-                - (tick - c.start as f64) / 480. * self.options.pixels_per_beat
+                - (tick - c.start as f64) / TICKS_PER_BEAT * self.options.pixels_per_beat
         }
     }
     pub fn pages(&self) -> Vec<std::ops::Range<usize>> {
@@ -470,7 +488,7 @@ mod tests {
             false,
         )?;
         let l = Layout::build(&s, Options::default())?;
-        assert!(l.options.pixels_per_beat * 120. / 480. >= 22.5);
+        assert!(l.options.pixels_per_beat * 120. / TICKS_PER_BEAT >= 22.5);
         let fixed = Layout::build(
             &s,
             Options {
@@ -528,7 +546,7 @@ mod tests {
             )?;
             let (a, b) = (&l.columns[0], &l.columns[1]);
             assert_ne!(a.end - a.start, b.end - b.start);
-            let unit = l.options.pixels_per_beat / 480.;
+            let unit = l.options.pixels_per_beat / TICKS_PER_BEAT;
             for c in [a, b] {
                 // Time still runs upward at the same scale in every column.
                 let d = l.y(c, c.start as f64) - l.y(c, c.end as f64);
