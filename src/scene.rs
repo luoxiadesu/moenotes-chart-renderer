@@ -40,7 +40,8 @@ pub struct Scene {
     pub ribbons: Vec<Ribbon>,
     pub pairs: Vec<(i32, i32)>,
     pub annotations: Vec<Annotation>,
-    /// Note values for the left rail, one per playable onset (`ticks`).
+    /// Note values for the left rail, one per playable onset (`ticks`), in tick order. Rendering keeps the
+    /// first label of a crowded run, so consumers must not reorder these.
     pub tick_labels: Vec<TickLabel>,
     pub fever: Vec<(i32, i32)>,
     pub source_notes: usize,

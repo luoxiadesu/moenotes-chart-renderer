@@ -7,11 +7,9 @@
 //!
 //! Charts are not guaranteed to sit on exact tick grids, so a raw fraction could print nonsense such as
 //! `79/1920`; the gap snaps to the nearest standard note value instead.
+use crate::layout::PPQ;
 use crate::parser::Score;
 use serde::Serialize;
-
-/// Ticks per beat; the parser and layout share this clock.
-pub const PPQ: i32 = 480;
 
 /// Playable onsets: taps, flicks and slide endpoints. Trace lines contribute their two endpoints (61/62) — the
 /// judgement clock counts them — while their interior connections (63), standalone trace drawing (60), guides
@@ -65,12 +63,15 @@ pub fn snap_note_value(value: f64) -> (i32, i32) {
 /// The note value from `tick` to the next rhythm event or the end of the current bar, as `/4`, `/8`, `3/16`, …
 pub fn note_value_label(score: &Score, tick: i32, next_tick: Option<i32>) -> Option<String> {
     let position = score.position(tick).ok()?;
-    let bar_end = tick + (position.bar_ticks - position.rhythm);
+    let bar_end = tick.checked_add(position.bar_ticks - position.rhythm)?;
     let interval = match next_tick {
         None => bar_end - tick,
         Some(next) => {
             let gap = next - tick;
-            if gap > position.bar_ticks || (gap > position.bar_ticks / 2 && next >= bar_end) {
+            // A rest that stays in the bar keeps its full value; once it crosses the bar line after more than
+            // half a bar it is cut at the bar end. `next == bar_end` lands exactly on the line, so it is not a
+            // crossing.
+            if gap > position.bar_ticks || (gap > position.bar_ticks / 2 && next > bar_end) {
                 bar_end - tick
             } else {
                 gap
@@ -88,17 +89,20 @@ pub fn note_value_label(score: &Score, tick: i32, next_tick: Option<i32>) -> Opt
     })
 }
 
-/// Labels for every playable onset, in tick order.
+/// Labels for every playable onset, in tick order. Skipping a tick whose gap cannot be measured keeps the
+/// remaining labels in that same order, which the renderer relies on to drop crowded neighbours.
 pub fn tick_labels(score: &Score) -> Vec<TickLabel> {
     let ticks = rhythm_ticks(score);
-    ticks
+    let labels: Vec<TickLabel> = ticks
         .iter()
         .enumerate()
         .filter_map(|(index, &tick)| {
             let next = ticks.get(index + 1).copied();
             note_value_label(score, tick, next).map(|text| TickLabel { tick, text })
         })
-        .collect()
+        .collect();
+    debug_assert!(labels.windows(2).all(|w| w[0].tick < w[1].tick));
+    labels
 }
 
 #[cfg(test)]
@@ -194,6 +198,18 @@ mod tests {
         // Only the standalone tap is a rhythm event; none of the guide's nodes are.
         assert_eq!(rhythm_ticks(&s), [1920]);
         assert_eq!(tick_labels(&s).len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn a_rest_landing_on_the_bar_line_keeps_its_value() -> Result<()> {
+        // From the second beat of a 4/4 bar to the next bar line: 1440 ticks = 3/4. The line itself is not a
+        // crossing, so the label must not be cut and rewritten as a different fraction.
+        let s = score(r#"{"events":{},"notes":[{"t":480},{"t":1920}]}"#)?;
+        assert_eq!(
+            note_value_label(&s, 480, Some(1920)).as_deref(),
+            Some("3/4")
+        );
         Ok(())
     }
 

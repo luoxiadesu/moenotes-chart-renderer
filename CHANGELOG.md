@@ -8,7 +8,10 @@
   crosses the bar line after more than half a bar is cut at the bar end, and
   labels closer than 10 px are dropped instead of overlapping.
 - The left gutter widens from 28 to 68 px with bar numbers on its outer edge and
-  note values on the inner one; every column is 40 px wider than before.
+  note values on the inner one, so every column is at least 40 px wider before
+  `chart_text_scale` applies.
+- `layout::PPQ` is now the single ticks-per-beat constant shared by layout and
+  the note-value rail.
 
 ## Unreleased — sheet layout
 

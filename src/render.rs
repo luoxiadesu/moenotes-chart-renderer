@@ -1530,7 +1530,8 @@ pub fn render_memory(
                 }
             }
             // Note values on the inner left rail, right-aligned against the track; the outer rail keeps the
-            // bar numbers. Values closer together than `TICK_MIN_GAP` are dropped, not squeezed.
+            // bar numbers. Values closer together than `TICK_MIN_GAP` are dropped, not squeezed: the anchor is
+            // the last label that was kept, so a crowded run keeps its earliest value.
             let tick_size = if modern { 10. * ts as f32 } else { 9.5 };
             let tick_color = mix(palette.muted, palette.background, 0.28);
             let mut previous_y: Option<f64> = None;
