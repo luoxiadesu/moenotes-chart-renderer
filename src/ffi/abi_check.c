@@ -9,6 +9,8 @@ _Static_assert(sizeof(void*) == 8, "64-bit native ABI required");
 _Static_assert(sizeof(moenotes_allocator_t) == 32, "native allocator ABI changed");
 #endif
 _Static_assert(sizeof(moenotes_parse_options_t) == 12, "options ABI changed");
+_Static_assert(offsetof(moenotes_parse_options_t, packed_native_notes) == 10,
+               "packed_native_notes offset changed");
 _Static_assert(sizeof(moenotes_position_t) == 32, "position ABI changed");
 _Static_assert(sizeof(moenotes_note_view_t) == 136, "note ABI changed");
 _Static_assert(offsetof(moenotes_note_view_t, position) == 16, "position offset changed");

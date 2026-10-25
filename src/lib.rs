@@ -18,6 +18,8 @@ pub mod typography;
 extern crate libz_sys;
 #[cfg(not(target_os = "emscripten"))]
 pub mod metadata;
+#[cfg(not(target_os = "emscripten"))]
+pub mod packed;
 
 pub mod api;
 #[cfg(not(target_os = "emscripten"))]

@@ -116,14 +116,19 @@ fn checked(code: u32) -> Result<()> {
 }
 impl Score {
     pub fn parse(data: &[u8], mirror: bool) -> Result<Self> {
+        Self::parse_with(data, mirror, false)
+    }
+    /// `packed` accepts already-expanded native snapshots
+    /// (`"format": "nnnotes.live-score/1"`); those keep their own fields.
+    pub fn parse_with(data: &[u8], mirror: bool, packed: bool) -> Result<Self> {
         ensure!(
             data.len() <= 64 * 1024 * 1024,
             "Chart exceeds 64 MiB input limit"
         );
         // SAFETY: the version pointer is a static NUL-terminated C string.
         ensure!(
-            unsafe { CStr::from_ptr(ffi::moenotes_version_string()) }.to_bytes() == b"0.3.0",
-            "Parser must be v0.3.0"
+            unsafe { CStr::from_ptr(ffi::moenotes_version_string()) }.to_bytes() == b"0.3.2",
+            "Parser must be v0.3.2"
         );
         let mut options = ffi::moenotes_parse_options_t::default();
         let mut handle = ptr::null_mut();
@@ -132,6 +137,7 @@ impl Score {
         unsafe {
             ffi::moenotes_default_parse_options(&mut options);
             options.mirror = u8::from(mirror);
+            options.packed_native_notes = u8::from(packed);
             let result = ffi::moenotes_score_parse(
                 data.as_ptr().cast::<c_void>(),
                 data.len(),
@@ -165,10 +171,10 @@ impl Score {
             },
         };
         s.read_model()?;
-        s.statistics = Self::statistics(data, mirror)?;
+        s.statistics = Self::statistics(data, mirror, packed)?;
         Ok(s)
     }
-    fn statistics(data: &[u8], mirror: bool) -> Result<Statistics> {
+    fn statistics(data: &[u8], mirror: bool, packed: bool) -> Result<Statistics> {
         let mut options = ffi::moenotes_parse_options_t::default();
         let mut p = ptr::null_mut();
         let mut error = [0i8; 256];
@@ -177,6 +183,7 @@ impl Score {
         unsafe {
             ffi::moenotes_default_parse_options(&mut options);
             options.mirror = u8::from(mirror);
+            options.packed_native_notes = u8::from(packed);
             options.slide_combo_unit = 8;
             let result = ffi::moenotes_score_parse(
                 data.as_ptr().cast(),

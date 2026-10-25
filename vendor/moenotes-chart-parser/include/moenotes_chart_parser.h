@@ -6,10 +6,10 @@
 
 #define MOENOTES_VERSION_MAJOR 0
 #define MOENOTES_VERSION_MINOR 3
-#define MOENOTES_VERSION_PATCH 0
-#define MOENOTES_VERSION_STRING "0.3.0"
+#define MOENOTES_VERSION_PATCH 2
+#define MOENOTES_VERSION_STRING "0.3.2"
 
-/* Public v0.3.0 contract: see docs/api.md for ownership and migration. */
+/* Public v0.3.x contract: see docs/api.md for ownership and migration. */
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -44,6 +44,10 @@ typedef struct moenotes_parse_options {
     uint32_t slide_combo_unit; /* 0 disables, 8 enables relative eighth notes. */
     uint8_t mirror;
     uint8_t add_flick_hidden;
+    /* 1 accepts packed snapshots ("format": "nnnotes.live-score/1") whose
+     * notes are already native nodes. Off by default; source charts are
+     * unchanged either way. */
+    uint8_t packed_native_notes;
 } moenotes_parse_options_t;
 
 typedef struct moenotes_position {
@@ -161,7 +165,8 @@ typedef struct moenotes_line_view {
 typedef enum moenotes_warning {
     MOENOTES_WARNING_NONE = 0,
     MOENOTES_WARNING_NONMONOTONIC_LINE = 1u << 0,
-    MOENOTES_WARNING_SHARED_ENDPOINT = 1u << 1
+    MOENOTES_WARNING_SHARED_ENDPOINT = 1u << 1,
+    MOENOTES_WARNING_PACKED_NATIVE = 1u << 2
 } moenotes_warning_t;
 
 typedef struct moenotes_bpm_event {

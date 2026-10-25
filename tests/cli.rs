@@ -37,7 +37,7 @@ impl Workspace {
                 "render",
                 fixture("synthetic.json").to_str().unwrap(),
                 "-o",
-                "sheet.png",
+                self.0.join("sheet.png").to_str().unwrap(),
                 "--supersample",
                 "1",
             ])
@@ -207,4 +207,120 @@ fn narrow_print_sheet_keeps_metadata_and_builtin_ignores_stale_pack_setting() {
     assert_eq!(report["layout"]["theme"], "white");
     assert_eq!(report["images"].as_array().unwrap().len(), 1);
     assert!(report["images"][0]["width"].as_i64().unwrap() >= 360);
+}
+
+#[test]
+fn packed_snapshot_uses_judgement_count_as_master_full_combo() {
+    let chart =
+        serde_json::from_slice::<Value>(&fs::read(fixture("packed.json")).unwrap()).unwrap();
+    assert_eq!(chart["format"], "nnnotes.live-score/1");
+    assert!(chart.get("meta").is_none() && chart.get("score").is_none());
+    let w = Workspace::new();
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_moenotes-chart-renderer"))
+            .current_dir(&w.0)
+            .args([
+                "render",
+                fixture("packed.json").to_str().unwrap(),
+                "-o",
+                w.0.join("packed.png").to_str().unwrap(),
+                "--supersample",
+                "1",
+            ])
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let first = run(&[]);
+    success(first.clone());
+    let report: Value = serde_json::from_slice(
+        &fs::read(w.0.join("packed.render.json")).unwrap_or_else(|_| panic!("{:?}", first)),
+    )
+    .unwrap();
+    assert_eq!(report["metadata"]["master_full_combo"], 54);
+    assert_eq!(report["statistics"]["reconstructed_full_combo"], 54);
+    assert!(
+        !report["warnings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v.as_str().unwrap_or("").contains("Master FC differs")),
+        "{report}"
+    );
+    // An explicit JSON value keeps precedence over the packaged count.
+    fs::write(w.0.join("overlay.json"), br#"{"master_full_combo":12}"#).unwrap();
+    success(run(&["--metadata", "overlay.json"]));
+    let report: Value =
+        serde_json::from_slice(&fs::read(w.0.join("packed.render.json")).unwrap()).unwrap();
+    assert_eq!(report["metadata"]["master_full_combo"], 12);
+    assert!(
+        report["warnings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v.as_str().unwrap_or("").contains("Master FC differs"))
+    );
+}
+
+#[test]
+fn ordinary_chart_keeps_masterdata_full_combo() {
+    let w = Workspace::new();
+    success(w.run(&[
+        "--masterdata",
+        fixture("masterdata").to_str().unwrap(),
+        "--chart-key",
+        "test/test_03",
+        "--language",
+        "en",
+    ]));
+    assert_eq!(w.report()["metadata"]["master_full_combo"], 12);
+}
+
+#[test]
+fn manifest_parts_are_assembled_only_from_local_packs() {
+    let w = Workspace::new();
+    let assets = w.0.join("packs/assets");
+    fs::create_dir_all(&assets).unwrap();
+    fs::write(
+        assets.join("notes.json"),
+        br#"[{"op":1,"t":0,"pos":2,"size":6}]"#,
+    )
+    .unwrap();
+    fs::write(assets.join("format.json"), br#""nnnotes.live-score/1""#).unwrap();
+    fs::write(assets.join("count.json"), br#"1"#).unwrap();
+    let manifest = json!({
+        "files": {"score/0001_00.notes.json": {"parts": [
+            ["format", "assets/format.json", 1],
+            ["notes", "assets/notes.json", 1],
+            ["judgementNoteCount", "assets/count.json", 1]
+        ]}}
+    });
+    fs::write(
+        w.0.join("manifest.json"),
+        serde_json::to_vec(&manifest).unwrap(),
+    )
+    .unwrap();
+    let run = |packs: &str| {
+        Command::new(env!("CARGO_BIN_EXE_moenotes-chart-renderer"))
+            .current_dir(&w.0)
+            .args([
+                "render",
+                w.0.join("manifest.json").to_str().unwrap(),
+                "-o",
+                w.0.join("parts.png").to_str().unwrap(),
+                "--supersample",
+                "1",
+                "--packs",
+                packs,
+            ])
+            .output()
+            .unwrap()
+    };
+    let failed = run("missing-packs");
+    assert!(!failed.status.success());
+    success(run("packs"));
+    let report: Value =
+        serde_json::from_slice(&fs::read(w.0.join("parts.render.json")).unwrap()).unwrap();
+    assert_eq!(report["metadata"]["master_full_combo"], 1);
+    assert_eq!(report["source_notes"], 1);
 }

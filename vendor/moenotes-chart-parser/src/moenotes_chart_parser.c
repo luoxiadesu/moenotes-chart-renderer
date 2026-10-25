@@ -1115,6 +1115,273 @@ static int creation_cmp(const void *a, const void *b) {
         return x->bucket < y->bucket ? -1 : 1;
     return x->sequence < y->sequence ? -1 : x->sequence > y->sequence;
 }
+/* Inverse of position() for packed nodes: find the tick inside bar p->bar
+ * whose progress is nearest rhythm/unit. */
+static int tick_of_position(moenotes_score_t *s, const moenotes_position_t *p, int32_t *out) {
+    for (size_t i = 0; i < s->sig_count; i++) {
+        const sig_t *g = &s->sigs[i];
+        if (g->bar > p->bar)
+            break;
+        if (g->bar + (g->length ? (INT32_MAX - g->tick) / g->length : 0) < p->bar)
+            continue;
+        /* Packed `rhythm` counts units inside the bar (progress = rhythm/unit),
+         * not tick offsets; the source-chart `position()` uses tick offsets
+         * with unit = bar length. Convert through the bar length. */
+        int64_t bar_len = g->length;
+        /* Packed rhythm/unit is bar progress and may not land on a whole
+         * tick (unit 9 in a 19/16 bar); pick the nearest tick inside the
+         * bar, requiring at most half a tick of rounding error. */
+        if (p->rhythmic_unit > 0 && p->rhythm <= p->rhythmic_unit) {
+            double want = (double)p->rhythm / (double)p->rhythmic_unit;
+            int64_t base = (int64_t)(p->bar - g->bar) * bar_len;
+            int32_t length = bar_len > INT32_MAX ? INT32_MAX : (int32_t)bar_len;
+            /* rhythm == unit is the bar end: the source position of that
+             * instant is the bar's last tick (bar stays, rhythm = last
+             * unit), not one tick short of it. */
+            if (want >= 1.0) {
+                if (base + bar_len >= 0 && base + bar_len <= INT32_MAX - (int64_t)g->tick) {
+                    *out = g->tick + (int32_t)(base + bar_len);
+                    return 1;
+                }
+                continue;
+            }
+            int32_t offset = (int32_t)(want * (double)length + 0.5);
+            if (offset >= length)
+                offset = length - 1;
+            int64_t span = base + offset;
+            if (span >= 0 && span <= INT32_MAX - (int64_t)g->tick) {
+                int32_t tick = g->tick + (int32_t)span;
+                moenotes_position_t check;
+                if (position(s, tick, &check) && check.bar == p->bar &&
+                    fabs((double)check.bar_progress - (double)(float)want) <=
+                        0.5 / (double)length + 1e-6) {
+                    *out = tick;
+                    return 1;
+                }
+            }
+            /* g is not the signature covering p->bar; try the next one. */
+            continue;
+        }
+    }
+    return 0;
+}
+/* Packed nodes keep their own bar/rhythm/time; only review the field shapes. */
+static int read_packed_note(moenotes_score_t *s, yyjson_val *raw, int source, note_t *out) {
+    memset(out, 0, sizeof(*out));
+    out->alias = SIZE_MAX;
+    moenotes_note_view_t *v = &out->v;
+    if (!yyjson_is_obj(raw))
+        return fail(s, MOENOTES_ERR_SCHEMA);
+    v->pair_note_id = v->parent_note_id = v->hidden_for_note_id = v->line_id = v->line_index = -1;
+    v->source_index = source;
+    v->lane_count = LANES;
+    if (!integer(s, get(raw, "t"), 0, 0, INT32_MAX, &v->tick) ||
+        !boolean(s, get(raw, "crit"), 0, &v->critical) ||
+        !boolean(s, get(raw, "visible"), 1, &v->visible))
+        return 0;
+    if (!integer(s, get(raw, "bar"), 0, 0, INT32_MAX, &v->position.bar) ||
+        !integer(s, get(raw, "rhythm"), 0, 0, INT32_MAX, &v->position.rhythm) ||
+        !integer(s, get(raw, "rhythmicUnit"), 1920, 1, INT32_MAX, &v->position.rhythmic_unit) ||
+        !integer(s, get(raw, "timeMs"), 0, 0, INT32_MAX, &v->position.time_ms) ||
+        !integer(s, get(raw, "op"), 1, 1, 122, (int32_t *)&v->operate_type))
+        return 0;
+    switch (v->operate_type) {
+    case MOENOTES_OP_NORMAL:
+    case MOENOTES_OP_SLIDE_BEGIN:
+    case MOENOTES_OP_SLIDE_CONNECTION:
+    case MOENOTES_OP_SLIDE_END:
+    case MOENOTES_OP_FLICK:
+    case MOENOTES_OP_SLIDE_BEGIN_FLICK:
+    case MOENOTES_OP_SLIDE_END_FLICK:
+    case MOENOTES_OP_TRACE:
+    case MOENOTES_OP_SLIDE_BEGIN_TRACE:
+    case MOENOTES_OP_SLIDE_END_TRACE:
+    case MOENOTES_OP_SLIDE_CONNECTION_TRACE:
+    case MOENOTES_OP_GUIDE_BEGIN:
+    case MOENOTES_OP_GUIDE_BEGIN_NORMAL:
+    case MOENOTES_OP_GUIDE_BEGIN_FLICK:
+    case MOENOTES_OP_GUIDE_BEGIN_TRACE:
+    case MOENOTES_OP_GUIDE_END:
+    case MOENOTES_OP_GUIDE_END_TRACE:
+    case MOENOTES_OP_HIDDEN_SLIDE_BEGIN:
+    case MOENOTES_OP_HIDDEN_SLIDE_END:
+    case MOENOTES_OP_INVALID_HIDDEN:
+    case MOENOTES_OP_COMBO:
+    case MOENOTES_OP_COMBO_SKIP:
+    case MOENOTES_OP_HIDDEN:
+        break;
+    default:
+        return fail(s, MOENOTES_ERR_SCHEMA);
+    }
+    /* Combo nodes carry no source tick; recover one from bar/rhythm so all
+     * notes keep a usable tick ordering. */
+    if (!get(raw, "t")) {
+        int32_t recovered;
+        if (!tick_of_position(s, &v->position, &recovered))
+            return fail(s, MOENOTES_ERR_RANGE);
+        v->tick = recovered;
+    }
+    {
+        /* Packed nodes name their slide line; standalone notes have none. */
+        yyjson_val *ids = get(raw, "lineIds");
+        if (yyjson_is_arr(ids) && yyjson_arr_size(ids))
+            v->line_id = (int32_t)yyjson_get_int(yyjson_arr_get(ids, 0));
+        ids = get(raw, "lineIndices");
+        if (yyjson_is_arr(ids) && yyjson_arr_size(ids))
+            v->line_index = (int32_t)yyjson_get_int(yyjson_arr_get(ids, 0));
+        ids = get(raw, "pairNoteId");
+        if (yyjson_is_int(ids))
+            v->pair_note_id = (int32_t)yyjson_get_int(ids);
+    }
+    v->position.bar_progress = (double)v->position.rhythm / (double)v->position.rhythmic_unit;
+    {
+        double pos = 0, width = 6;
+        if (!number(s, get(raw, "laneStartFloat"), 0, -100000, 100000, &pos) ||
+            !number(s, get(raw, "width"), 6, 0, 100000, &width))
+            return 0;
+        geometry(v, (float)pos, (float)width);
+        out->overlap_lane = even_round((float)pos);
+        out->overlap_width = even_round((float)width);
+    }
+    {
+        /* Line easing moves the slide; unknown values fail like the source
+         * reader instead of silently rendering Linear. */
+        const char *name = str(get(raw, "lineEase"), "Linear");
+        if (get(raw, "lineEase") && !yyjson_is_str(get(raw, "lineEase")))
+            return fail(s, MOENOTES_ERR_SCHEMA);
+        if (!strcmp(name, "Linear"))
+            v->ease_left = MOENOTES_EASE_LINEAR;
+        else if (!strcmp(name, "EaseIn"))
+            v->ease_left = MOENOTES_EASE_IN;
+        else if (!strcmp(name, "EaseOut"))
+            v->ease_left = MOENOTES_EASE_OUT;
+        else
+            return fail(s, MOENOTES_ERR_SCHEMA);
+        name = str(get(raw, "lineEaseR"), "Linear");
+        if (get(raw, "lineEaseR") && !yyjson_is_str(get(raw, "lineEaseR")))
+            return fail(s, MOENOTES_ERR_SCHEMA);
+        if (!strcmp(name, "Linear"))
+            v->ease_right = MOENOTES_EASE_LINEAR;
+        else if (!strcmp(name, "EaseIn"))
+            v->ease_right = MOENOTES_EASE_IN;
+        else if (!strcmp(name, "EaseOut"))
+            v->ease_right = MOENOTES_EASE_OUT;
+        else
+            return fail(s, MOENOTES_ERR_SCHEMA);
+        if (v->operate_type != MOENOTES_OP_SLIDE_BEGIN &&
+            v->operate_type != MOENOTES_OP_SLIDE_BEGIN_FLICK &&
+            v->operate_type != MOENOTES_OP_SLIDE_BEGIN_TRACE)
+            v->ease_left = v->ease_right = MOENOTES_EASE_LINEAR;
+    }
+    {
+        const char *dir = str(get(raw, "direction"), "Normal");
+        v->direction = !strcmp(dir, "Left")    ? MOENOTES_DIRECTION_LEFT
+                       : !strcmp(dir, "Right") ? MOENOTES_DIRECTION_RIGHT
+                                               : MOENOTES_DIRECTION_NORMAL;
+        const char *alpha = str(get(raw, "alpha"), "none");
+        v->alpha = !strcmp(alpha, "fadeIn")    ? MOENOTES_ALPHA_FADE_IN
+                   : !strcmp(alpha, "fadeOut") ? MOENOTES_ALPHA_FADE_OUT
+                                               : MOENOTES_ALPHA_NONE;
+    }
+    v->slide_along = 0;
+    return 1;
+}
+/* Packed nodes carry their line and pair directly; the graph pass only has to
+ * group members into lines and fill indices. */
+static int build_packed_lines(moenotes_score_t *s) {
+    size_t i, lines = 0;
+    int32_t *remap = NULL;
+    /* line -1: standalone; line 0: unknown; other values: native line id. */
+    for (i = 0; i < s->note_count; i++) {
+        int32_t line = s->notes[i].v.line_id;
+        if (line != 0 && line != -1)
+            lines = (size_t)line + 1;
+    }
+    if (!lines) {
+        for (i = 0; i < s->note_count; i++)
+            s->notes[i].v.line_id = -1;
+        return 1;
+    }
+    if (!RESERVE(s, lines, lines))
+        return 0;
+    remap = alloc(&s->alc, lines * sizeof(*remap));
+    if (!remap)
+        return fail(s, MOENOTES_ERR_OUT_OF_MEMORY);
+    for (i = 0; i < lines; i++) {
+        s->lines[i] = (line_t){0};
+        s->lines[i].slot = -1;
+        remap[i] = -1;
+    }
+    for (i = 0; i < s->note_count; i++) {
+        int32_t line = s->notes[i].v.line_id;
+        if (line == 0 || line < 0 || (size_t)line >= lines)
+            continue;
+        if (!s->lines[line].count) {
+            int32_t op = s->notes[i].v.operate_type;
+            s->lines[line].first = i;
+            s->lines[line].guide =
+                op == MOENOTES_OP_GUIDE_BEGIN || op == MOENOTES_OP_GUIDE_BEGIN_TRACE ||
+                op == MOENOTES_OP_GUIDE_BEGIN_FLICK;
+            s->lines[line].slot = s->notes[i].v.line_index;
+            remap[line] = 1;
+        }
+        s->lines[line].count++;
+    }
+    /* Compact away lines that never appear, keeping line ids dense. */
+    {
+        size_t n = 0;
+        for (i = 0; i < lines; i++)
+            if (remap[i] > 0)
+                remap[i] = (int32_t)n++;
+        for (i = 0; i < lines; i++)
+            if (remap[i] >= 0)
+                s->lines[remap[i]] = s->lines[i];
+        for (i = 0; i < s->note_count; i++) {
+            moenotes_note_view_t *v = &s->notes[i].v;
+            int32_t line = v->line_id;
+            v->line_id = line > 0 && (size_t)line < lines && remap[line] >= 0 ? remap[line] : -1;
+        }
+        s->line_count = n;
+    }
+    for (i = 0; i < s->note_count; i++) {
+        moenotes_note_view_t *v = &s->notes[i].v;
+        if (v->line_id >= 0 && v->line_id < (int32_t)s->line_count &&
+            s->lines[v->line_id].count)
+            v->parent_note_id = s->notes[s->lines[v->line_id].first].v.id;
+        else
+            v->parent_note_id = -1;
+        if (v->pair_note_id >= (int32_t)s->note_count)
+            v->pair_note_id = -1;
+    }
+    release(&s->alc, remap);
+    return 1;
+}
+/* Packed snapshots already carry native order; keep it and derive commands. */
+static int packed_order(moenotes_score_t *s) {
+    size_t i;
+    s->order = alloc(&s->alc, s->note_count * sizeof(*s->order));
+    if (!s->order)
+        return fail(s, MOENOTES_ERR_OUT_OF_MEMORY);
+    for (i = 0; i < s->note_count; i++)
+        s->order[s->order_count++] = i;
+
+    return 1;
+}
+static int build_packed_notes(moenotes_score_t *s, yyjson_val *array) {
+    size_t count = yyjson_arr_size(array), i;
+    if (!yyjson_is_arr(array))
+        return fail(s, MOENOTES_ERR_SCHEMA);
+    if (count > MAX_RECORDS)
+        return fail(s, MOENOTES_ERR_RANGE);
+    for (i = 0; i < count; i++) {
+        note_t n;
+        if (!read_packed_note(s, yyjson_arr_get(array, i), (int)i, &n))
+            return 0;
+        if (!append_note(s, n))
+            return 0;
+    }
+    return 1;
+}
 static int build_order(moenotes_score_t *s) {
     if (!s->note_count)
         return 1;
@@ -1428,7 +1695,16 @@ moenotes_result_t moenotes_score_parse(const void *data, size_t size,
     if (!score)
         score = root;
     yyjson_val *events = get(score, "events"), *notes = get(score, "notes");
-    if (!yyjson_is_obj(score) || !yyjson_is_obj(events) || !yyjson_is_arr(notes))
+    const char *format = str(get(root, "format"), "");
+    if (o->packed_native_notes && !strcmp(format, "nnnotes.live-score/1") &&
+        yyjson_is_arr(get(root, "notes"))) {
+        /* Native nodes need no graph merge, hidden or Combo derivation. */
+        s->warnings |= MOENOTES_WARNING_PACKED_NATIVE;
+        if (build_timeline(s, events) && build_extra_events(s, events) &&
+            build_packed_notes(s, get(root, "notes")) && build_packed_lines(s) &&
+            packed_order(s) && build_indices(s))
+            finalize_geometry(s);
+    } else if (!yyjson_is_obj(score) || !yyjson_is_obj(events) || !yyjson_is_arr(notes))
         s->error = MOENOTES_ERR_SCHEMA;
     else if (build_timeline(s, events) && build_extra_events(s, events) && build_notes(s, notes)) {
         merge_graph(s);

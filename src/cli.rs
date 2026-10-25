@@ -136,7 +136,33 @@ pub fn run(args: &[OsString]) -> Result<()> {
         "Input exceeds 64 MiB"
     );
     let total_started = std::time::Instant::now();
-    let score = Score::parse(&fs::read(&input)?, mirror)?;
+    let chart_bytes = fs::read(&input)?;
+    // Packed snapshots already hold native nodes; everything else is a source
+    // chart. Detection is by the declared format, not by guesswork.
+    let mut chart_value: serde_json::Value = serde_json::from_slice(&chart_bytes)?;
+    let mut chart_bytes = chart_bytes;
+    // A chart-site manifest (`files` + split parts) needs its assets; only read
+    // them from the local tree. Nothing is fetched over the network here.
+    if let Some(root) = &packs
+        && chart_value.get("files").is_some()
+        && !crate::packed::is_snapshot(&chart_value)
+    {
+        let snapshot = crate::packed::assemble_parts(&chart_value, |path| {
+            ensure!(
+                !path.starts_with('/') && !path.split(['/', '\\']).any(|c| c == ".."),
+                "Unsafe packed asset path"
+            );
+            Ok(serde_json::from_slice(&fs::read(root.join(path))?)?)
+        })?;
+        chart_bytes = serde_json::to_vec(&snapshot)?;
+        chart_value = snapshot;
+    }
+    let packed = crate::packed::is_snapshot(&chart_value);
+    if packed {
+        crate::packed::normalize_timeline(&mut chart_value);
+        chart_bytes = serde_json::to_vec(&chart_value)?;
+    }
+    let score = Score::parse_with(&chart_bytes, mirror, packed)?;
     let parse_seconds = total_started.elapsed().as_secs_f64();
     for path in output.iter().chain(scene_path.iter()) {
         ensure!(
@@ -145,7 +171,7 @@ pub fn run(args: &[OsString]) -> Result<()> {
         );
     }
     if command == "inspect" {
-        let value = serde_json::json!({"parser_version":"0.3.0","mirror":mirror,"notes":score.notes,"branches":score.branches,"bpms":score.bpms,"signatures":score.signatures,"events":score.events,"warnings":score.warnings,"statistics":score.statistics});
+        let value = serde_json::json!({"parser_version":"0.3.2","mirror":mirror,"notes":score.notes,"branches":score.branches,"bpms":score.bpms,"signatures":score.signatures,"events":score.events,"warnings":score.warnings,"statistics":score.statistics});
         let data = serde_json::to_vec_pretty(&value)?;
         if let Some(out) = output {
             if let Some(p) = out.parent().filter(|p| !p.as_os_str().is_empty()) {
@@ -185,6 +211,9 @@ pub fn run(args: &[OsString]) -> Result<()> {
         .transpose()?;
     let cover_overridden =
         cover_path.is_some() || overlay.as_ref().is_some_and(|v| v.get("cover").is_some());
+    let overlay_fc = overlay
+        .as_ref()
+        .is_some_and(|v| v.get("master_full_combo").is_some());
     if let Some(dir) = &masterdata {
         let key = chart_key
             .as_deref()
@@ -221,6 +250,14 @@ pub fn run(args: &[OsString]) -> Result<()> {
                 );
             }
         }
+    }
+    // Packed snapshots carry no master join; their judgement count is the
+    // native full combo. CLI fields and metadata JSON still take precedence.
+    if metadata.master_full_combo.is_none() && !overlay_fc {
+        metadata.master_full_combo = crate::packed::packed_full_combo(
+            &chart_value,
+            score.statistics.reconstructed_full_combo as u64,
+        )?;
     }
     if let Some(p) = cover_path {
         metadata.cover = Some(p.to_string_lossy().into());

@@ -2,8 +2,8 @@
 
 pub const MOENOTES_VERSION_MAJOR: u32 = 0;
 pub const MOENOTES_VERSION_MINOR: u32 = 3;
-pub const MOENOTES_VERSION_PATCH: u32 = 0;
-pub const MOENOTES_VERSION_STRING: &[u8; 6] = b"0.3.0\0";
+pub const MOENOTES_VERSION_PATCH: u32 = 2;
+pub const MOENOTES_VERSION_STRING: &[u8; 6] = b"0.3.2\0";
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct moenotes_score {
@@ -84,6 +84,9 @@ pub struct moenotes_parse_options {
     pub slide_combo_unit: u32,
     pub mirror: u8,
     pub add_flick_hidden: u8,
+    /// # Safety caveat: field added in parser 0.3.2.
+    pub packed_native_notes: u8,
+    pub reserved: [u8; 1],
 }
 #[allow(clippy::unnecessary_operation, clippy::identity_op)]
 const _: () = {
@@ -98,6 +101,10 @@ const _: () = {
         [::std::mem::offset_of!(moenotes_parse_options, mirror) - 8usize];
     ["Offset of field: moenotes_parse_options::add_flick_hidden"]
         [::std::mem::offset_of!(moenotes_parse_options, add_flick_hidden) - 9usize];
+    ["Offset of field: moenotes_parse_options::packed_native_notes"]
+        [::std::mem::offset_of!(moenotes_parse_options, packed_native_notes) - 10usize];
+    ["Offset of field: moenotes_parse_options::reserved"]
+        [::std::mem::offset_of!(moenotes_parse_options, reserved) - 11usize];
 };
 pub type moenotes_parse_options_t = moenotes_parse_options;
 #[repr(C)]

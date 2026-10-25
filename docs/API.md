@@ -67,6 +67,15 @@ combos; skipped combos; reconstructed full combo. A separate parse with combo
 unit 8 computes statistics. Online master FC is retained separately and a
 mismatch warns. Reconstructed counts remain bounded by parser compatibility.
 
+`packed::is_snapshot` recognizes already-expanded native snapshots
+(`"format": "nnnotes.live-score/1"`, no `meta`/`score`, notes carrying `op`);
+`Score::parse_with(..., packed)` reads those nodes as-is (no Combo/hidden/master
+derivation). `packed::assemble_parts` joins a chart-site manifest's split
+`parts` from local assets, and `packed::packed_full_combo` fills an absent
+`master_full_combo` from the parser's count on the same nodes, since such charts
+have no masterdata join. The master/reconstruction warning keeps its original
+rule for every chart.
+
 Auto-spacing increases pixels/beat to separate note bodies and centered Flick
 arrows, up to 160 px/beat. Pairs of structural connection anchors 1–2 ticks apart
 retain their exact coordinates and do not inflate spacing. The report's additive

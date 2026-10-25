@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased — packed snapshots
+
+- `render` accepts packed online snapshots (`"format": "nnnotes.live-score/1"`,
+  notes already expanded into native nodes, detected by the absence of
+  `meta`/`score` plus `op` on the first note). They are read as-is: no graph
+  merge, hidden notes, Combos or master positions are derived. Bundled parser
+  updated to 0.3.2 for `packed_native_notes` (opt-in there).
+- A chart-site manifest whose score entry is split into `parts` is assembled
+  from `--packs`/`MOENOTES_ASSETS_DIR`; missing assets fail, nothing is
+  downloaded. Manifest `score.events` survive as annotations.
+- For packed charts an absent master FC is the parser's count on the same
+  nodes (some packs report `judgementNoteCount` without Combos). masterdata and
+  metadata JSON still take precedence, and the master/reconstruction mismatch
+  warning keeps its original rule.
+
 ## Unreleased — note values
 
 - Every playable onset (taps, flicks, slide endpoints) prints the note value to

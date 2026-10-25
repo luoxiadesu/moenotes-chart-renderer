@@ -144,6 +144,16 @@ Missing requested covers are errors. For another metadata source:
 Use `--metadata file.json`; its relative cover path resolves beside that file.
 Precedence is explicit CLI fields, then metadata JSON, then masterdata. Without
 metadata only the chart filename is used as a title; authors/levels are not guessed.
+
+Packed online snapshots (`"format": "nnnotes.live-score/1"`, notes already
+expanded into native nodes) carry no `meta`/`score` structure, so they cannot be
+joined to a master score. `render` detects them (no `meta`/`score`, pack format,
+notes with `op`) and reads the native nodes directly without deriving Combos,
+hidden notes or master positions; a chart-site manifest whose score is split
+into `parts` is assembled from `--packs`/`MOENOTES_ASSETS_DIR` first and never
+downloaded. For such charts the sheet's master FC is the parser's count on the
+same nodes, kept in `metadata.master_full_combo`; an explicit
+`master_full_combo` in metadata JSON still takes precedence.
 An explicit `--cover` or JSON `cover` overrides master cover lookup even when the
 by-key tree has no corresponding jacket. JSON `"cover": null` removes the cover.
 Duplicate music/difficulty associations are rejected rather than selecting a row.
